@@ -5,7 +5,7 @@ from math import inf
 from typing import Dict
 
 import matplotlib as mpl
-mpl.use('pgf')
+# mpl.use('pgf')
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -159,7 +159,7 @@ def _plot_avg_error(data, plot_name:str, extent_highs:tuple):
     plt.xlabel("y [m]")
     plt.title("Pixelwise averaged error [°C]")
     _aligned_colorbar()
-    plt.savefig(f"runs/{plot_name}_pixelwise_avg_error.pgf", format="pgf")
+    # plt.savefig(f"runs/{plot_name}_pixelwise_avg_error.pgf", format="pgf")
     plt.savefig(f"runs/{plot_name}_pixelwise_avg_error.png")
 
 def _plot_datafields(data: Dict[str, DataToVisualize], name_pic: str, figsize_x: float = 38.4, pic_format: str = "png"):

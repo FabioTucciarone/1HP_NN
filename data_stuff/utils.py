@@ -43,7 +43,7 @@ class SettingsTraining:
         
     def set_destination(self):
         if self.destination_dir == "":
-            if not self.case_2hp:
+            if not self.case:
                 extension = " inputs_"+self.inputs + " case_"+self.case
             else:
                 extension = " case_"+self.case

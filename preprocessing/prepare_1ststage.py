@@ -23,6 +23,19 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
         info = yaml.safe_load(file)
     prepare_dataset(paths, settings.dataset_raw, settings.inputs, info=info)
     
+def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
+    pass
+    #TODO: Argumentenliste prüfen
+        # Irgendwas unnötig für uns?
+        # Zur Not gleich lassen.
+    #TODO: Datenformat verstehen und passend erstellen
+        # prepare_dataset verstehen: Was wird eingelesen
+        # Wie aus skalaren Druck-/Durchlässigkeitswerten eine .txt Datei erstellen, die hier vorbereitet werden kann.
+            # Welche Informationen verwendet prepare_dataset?
+            # Wie diese in .txt Format speichern und dann auslesen
+            # Vorbereitet: Umwandeln des Datensatzes in "prepared"-Format wie unten (.pt)
+
+
 def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
     """
     Create a dataset from the raw pflotran data in raw_data_path.
