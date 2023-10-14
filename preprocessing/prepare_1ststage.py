@@ -35,6 +35,10 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
             # Wie diese in .txt Format speichern und dann auslesen
             # Vorbereitet: Umwandeln des Datensatzes in "prepared"-Format wie unten (.pt)
 
+    #TODO: Nur pflortran.h5 und settings.yaml wird eingelesen.
+        # Können wir eventuell eine Methode prepare_demonstrator_input(permeability, pressure) schreiben, die nur von settings.yaml abhängt?
+        # Wie werden dann die Label generiert? Grundwahrheit!
+
 
 def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
     """
