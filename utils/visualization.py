@@ -7,6 +7,8 @@ from typing import Dict
 import matplotlib as mpl
 # mpl.use('pgf')
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 import numpy as np
 import torch
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -53,7 +55,7 @@ class DataToVisualize:
         elif self.name == "SDF":
             self.name = "SDF-transformed position in [-]"
     
-def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: int = inf, plot_name: str = "default", pic_format: str = "png"):
+def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: int = inf, plot_name: str = "default", pic_format: str = "png", return_to_demonstrator = False):
     logging.warning("Plotting...")
 
     if amount_plots > len(dataloader.dataset):
@@ -97,14 +99,46 @@ def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: 
 
             name_pic = f"runs/{plot_name}_{current_id}"
             figsize_x = extent_highs[0]/extent_highs[1]*3
-            _plot_datafields(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
-            # _plot_isolines(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
-            # _isolines_measurements(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x)
-            # _plot_temperature_field(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
+
+            if return_to_demonstrator: 
+                predicted_temperature = get_predicted_temperature(dict_to_plot, pic_format=pic_format)
+                groundtruth_temperature = get_groundtruth_temperature(dict_to_plot, pic_format=pic_format)
+                error = get_error(dict_to_plot, pic_format=pic_format)
+                return [predicted_temperature, groundtruth_temperature, error]
+            else:
+                _plot_datafields(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
+                # _plot_isolines(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
+                # _isolines_measurements(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x)
+                # _plot_temperature_field(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
 
             if current_id >= amount_plots-1:
                 return None
             current_id += 1
+
+def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str, pic_format: str = "png"):
+    """Returns specified data field as a matplotlib-Figure object to simplify access by the demonstrator app"""
+    datapoint = data[datafield_name]
+    fig = Figure(figsize=(20, 2))
+    axis = fig.add_subplot(1, 1, 1)
+    axesImage = axis.imshow(datapoint.data.T, **datapoint.imshowargs)
+    axis.invert_yaxis()
+    _aligned_colorbar(fig, axesImage)
+    fig.tight_layout()
+    # fig.savefig(f"pipipopo_{datafield_name}.{pic_format}", format=pic_format) # for testing
+    return fig
+
+def get_predicted_temperature(data: Dict[str, DataToVisualize], pic_format: str = "png"):
+    """Returns predicted temperature field for demonstrator app"""
+    return get_datafield_figure(data, "t_out")
+
+def get_groundtruth_temperature(data: Dict[str, DataToVisualize], pic_format: str = "png"):
+    """Returns groundtruth temperature field for demonstrator app"""
+    return get_datafield_figure(data, "t_true")
+
+def get_error(data: Dict[str, DataToVisualize], pic_format: str = "png"):
+    """Returns groundtruth temperature field for demonstrator app"""
+    return get_datafield_figure(data, "error")
+
 
 def infer_all_and_summed_pic(model: UNet, dataloader: DataLoader, device: str):
     # sum inference time and error over all datapoints
@@ -268,7 +302,7 @@ def _plot_temperature_field(data: Dict[str, DataToVisualize], name_pic:str, figs
             plt.ylabel("x [m]")
             _aligned_colorbar(label=datapoint.name)
 
-    T_gwf_plus1, T_gwf_plusdiff = datapoint.contourargs["levels"]
+    T_gwf_plus1, T_gwf_plusdiff = datapoint.contourargs["levels"] #TODO: Error: not enough values to unpack (expected 2, got 1)
     plt.suptitle(f"Temperature field and isolines of {T_gwf_plus1} and {T_gwf_plusdiff} °C")
     plt.savefig(f"{name_pic}_combined.{pic_format}", format=pic_format)
 
@@ -276,3 +310,7 @@ def _aligned_colorbar(*args, **kwargs):
     cax = make_axes_locatable(plt.gca()).append_axes(
         "right", size=0.3, pad=0.05)
     plt.colorbar(*args, cax=cax, **kwargs)
+
+def _aligned_colorbar(figure: Figure, mappable, *args, **kwargs):
+    cax = make_axes_locatable(figure.gca()).append_axes("right", size=0.3, pad=0.05)
+    figure.colorbar(mappable, *args, cax=cax, **kwargs)

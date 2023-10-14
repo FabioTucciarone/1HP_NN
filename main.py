@@ -35,7 +35,7 @@ def init_data(settings: SettingsTraining, seed=1):
     return dataset, dataloaders
 
 
-def run(settings: SettingsTraining):
+def run(settings: SettingsTraining, return_to_demonstrator=False):
 
     dataset, dataloaders = init_data(settings)
 
@@ -47,7 +47,7 @@ def run(settings: SettingsTraining):
 
     # visualization
     if settings.visualize:
-        plot_sample(model, dataloaders["test"], settings.device, plot_name=settings.destination_dir + "/plot_test", amount_plots=5, pic_format="png")
+        return plot_sample(model, dataloaders["test"], settings.device, plot_name=settings.destination_dir + "/plot_test", amount_plots=5, pic_format="png", return_to_demonstrator=return_to_demonstrator)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
@@ -75,3 +75,32 @@ if __name__ == "__main__":
     settings.save()
 
     run(settings)
+
+def run_from_demonstrator(dataset_raw: str, model: str, inputs = "gksi"):
+    """Facilitate calls from demonstrator app (Unfinished!!)"""
+
+    logging.basicConfig(level=logging.WARNING)
+    settings = SettingsTraining(
+        dataset_raw=dataset_raw,
+        inputs = inputs,
+        device = "cpu",
+        epochs = 10000,
+        case = "test",
+        model = model,
+        visualize = True,
+        destination_dir=""
+    )
+
+    paths: Paths1HP
+    paths, dataset_prep = set_paths_1hpnn(settings.dataset_raw, settings.inputs)
+    settings.datasets_dir = paths.datasets_prepared_dir
+    print(settings.datasets_dir + "\n")
+    settings.dataset_prep = dataset_prep
+
+    # prepare dataset if test=case do it anyways because of potentially different std,mean,... values than trained with
+    prepare_dataset_for_1st_stage(paths, settings)
+    print(f"Dataset {paths.dataset_1st_prep_path} prepared")
+
+    settings.save()
+
+    return run(settings, return_to_demonstrator=True)
