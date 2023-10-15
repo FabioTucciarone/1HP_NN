@@ -21,7 +21,7 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
     # get info of training
     with open(os.path.join(os.getcwd(), settings.model, info_file), "r") as file:
         info = yaml.safe_load(file)
-    prepare_dataset(paths, settings.dataset_raw, settings.inputs, info=info)
+    prepare_demonstrator_input(paths, settings.dataset_raw, settings.inputs, info=info) # TODO: ACHTUNG, ersetze prepare_dataset mit prepare_demonstrator_input für Backend-Tests
     
 def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
     pass
@@ -38,6 +38,54 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     #TODO: Nur pflortran.h5 und settings.yaml wird eingelesen.
         # Können wir eventuell eine Methode prepare_demonstrator_input(permeability, pressure) schreiben, die nur von settings.yaml abhängt?
         # Wie werden dann die Label generiert? Grundwahrheit!
+
+    full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
+    dataset_prepared_path = pathlib.Path(paths.dataset_1st_prep_path)
+    dataset_prepared_path.mkdir(parents=True, exist_ok=True)
+    dataset_prepared_path.joinpath("Inputs").mkdir(parents=True, exist_ok=True)
+    dataset_prepared_path.joinpath("Labels").mkdir(parents=True, exist_ok=True)
+
+    transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
+    pflotran_settings = get_pflotran_settings(full_raw_path)
+    dims = np.array(pflotran_settings["grid"]["ncells"])
+    total_size = np.array(pflotran_settings["grid"]["size"])
+    cell_size = total_size/dims
+
+    tensor_transform = ToTensorTransform()
+    datapaths, runs = detect_datapoints(full_raw_path)
+    total = len(datapaths)
+    
+    # for, ersetzt, nur ein Datenpunkt
+    x = load_data(datapaths[0], "   0 Time  0.00000E+00 y", expand_property_names(inputs), dims) # Eingaben aus der .h5 
+    # TODO: Was genau ist x, können wir's durch unsere Eingaben ersetzen
+    
+    y = load_data(datapaths[0], "   4 Time  2.75000E+01 y", ["Temperature [C]"], dims) # Ausgaben (Grundwahrheit) aus der .h5
+    # TODO: Ersetze mit Berechnung der Grundwahrheit abh. von Eingaben
+
+    loc_hp = get_hp_location(x)
+    x = transforms(x, loc_hp=loc_hp)
+    x = tensor_transform(x)
+    y = transforms(y, loc_hp=loc_hp)
+    y = tensor_transform(y)
+    torch.save(x, os.path.join(dataset_prepared_path, "Inputs", f"{runs[0]}.pt"))
+    torch.save(y, os.path.join(dataset_prepared_path, "Labels", f"{runs[0]}.pt"))
+        
+    info["CellsNumberPrior"] = info["CellsNumber"]
+    info["PositionHPPrior"] = info["PositionLastHP"]
+    assert info["CellsSize"][:2] == cell_size.tolist()[:2], f"Cell size changed between given info.yaml {info['CellsSize']} and data {cell_size.tolist()}"        
+    info["CellsSize"] = cell_size.tolist()
+    # change of size possible; order of tensor is in any case the other way around
+    assert 1 in y.shape, "y is not expected to have several output parameters"
+    assert len(y.shape) == 3, "y is expected to be 2D"
+    dims = list(y.shape)[1:]
+    info["CellsNumber"] = dims
+    info["PositionLastHP"] = loc_hp.tolist()
+    with open(os.path.join(dataset_prepared_path, "info.yaml"), "w") as file:
+        yaml.dump(info, file)
+
+    normalize(dataset_prepared_path, info, total)
+
+    return info
 
 
 def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
