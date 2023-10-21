@@ -24,7 +24,6 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
     prepare_demonstrator_input(paths, settings.dataset_raw, settings.inputs, info=info) # TODO: ACHTUNG, ersetze prepare_dataset mit prepare_demonstrator_input für Backend-Tests
     
 def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
-    pass
     #TODO: Argumentenliste prüfen
         # Irgendwas unnötig für uns?
         # Zur Not gleich lassen.
@@ -39,6 +38,9 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
         # Können wir eventuell eine Methode prepare_demonstrator_input(permeability, pressure) schreiben, die nur von settings.yaml abhängt?
         # Wie werden dann die Label generiert? Grundwahrheit!
 
+    pressure = -2.830821194764205056e-03
+    permeability = 2.646978938535798940e-10
+
     full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
     dataset_prepared_path = pathlib.Path(paths.dataset_1st_prep_path)
     dataset_prepared_path.mkdir(parents=True, exist_ok=True)
@@ -47,6 +49,11 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     pflotran_settings = get_pflotran_settings(full_raw_path)
+
+    # Testweise ausgeben:
+    print(f"pflotran_settings = {pflotran_settings} \n")
+    print(f"dims = {pflotran_settings['grid']['ncells']} \n")
+
     dims = np.array(pflotran_settings["grid"]["ncells"])
     total_size = np.array(pflotran_settings["grid"]["size"])
     cell_size = total_size/dims
@@ -55,10 +62,32 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     datapaths, runs = detect_datapoints(full_raw_path)
     total = len(datapaths)
     
-    # for, ersetzt, nur ein Datenpunkt
     x = load_data(datapaths[0], "   0 Time  0.00000E+00 y", expand_property_names(inputs), dims) # Eingaben aus der .h5 
     # TODO: Was genau ist x, können wir's durch unsere Eingaben ersetzen
     
+    # Was wird für x ausgelesen?
+    # ['Pressure Gradient [-]', 'Permeability X [m^2]', 'SDF', 'Material ID']
+    print(f"x.keys() = {x.keys()} \n")
+
+    # Daten für's Modell
+    data = dict()
+
+    # Druck laden
+    empty_field = torch.ones(list(dims)).float()
+    data["Pressure Gradient [-]"] = empty_field * pressure
+
+    # Durchlässigkeit laden
+    data["Permeability X [m^2]"] = torch.tensor(np.full((dims[0] * dims[1]), permeability).reshape(dims, order='F')).float()
+
+    # Material ID
+
+    mat_id = np.full((dims[0] * dims[1]), 1)
+    mat_id[469] = 2 # TODO: Auslesen
+    data["SDF"] = torch.tensor(mat_id.reshape(dims, order='F')).float() 
+    data["Material ID"] = data["SDF"]
+
+    x = data
+
     y = load_data(datapaths[0], "   4 Time  2.75000E+01 y", ["Temperature [C]"], dims) # Ausgaben (Grundwahrheit) aus der .h5
     # TODO: Ersetze mit Berechnung der Grundwahrheit abh. von Eingaben
 
