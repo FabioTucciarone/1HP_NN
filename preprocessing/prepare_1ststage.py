@@ -17,6 +17,11 @@ from data_stuff.transforms import (ComposeTransform, NormalizeTransform,
 from data_stuff.utils import SettingsTraining
 from utils.prepare_paths import Paths1HP, Paths2HP
 
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forschungsprojekt-pumpen-demonstrator", "demonstrator_backend"))
+import generate_groundtruth as gen
+
+
 def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, info_file: str = "info.yaml"):
     # get info of training
     with open(os.path.join(os.getcwd(), settings.model, info_file), "r") as file:
@@ -24,19 +29,6 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
     prepare_demonstrator_input(paths, settings.dataset_raw, settings.inputs, info=info) # TODO: ACHTUNG, ersetze prepare_dataset mit prepare_demonstrator_input für Backend-Tests
     
 def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
-    #TODO: Argumentenliste prüfen
-        # Irgendwas unnötig für uns?
-        # Zur Not gleich lassen.
-    #TODO: Datenformat verstehen und passend erstellen
-        # prepare_dataset verstehen: Was wird eingelesen
-        # Wie aus skalaren Druck-/Durchlässigkeitswerten eine .txt Datei erstellen, die hier vorbereitet werden kann.
-            # Welche Informationen verwendet prepare_dataset?
-            # Wie diese in .txt Format speichern und dann auslesen
-            # Vorbereitet: Umwandeln des Datensatzes in "prepared"-Format wie unten (.pt)
-
-    #TODO: Nur pflortran.h5 und settings.yaml wird eingelesen.
-        # Können wir eventuell eine Methode prepare_demonstrator_input(permeability, pressure) schreiben, die nur von settings.yaml abhängt?
-        # Wie werden dann die Label generiert? Grundwahrheit!
 
     pressure = -2.830821194764205056e-03
     permeability = 2.646978938535798940e-10
@@ -62,34 +54,15 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     datapaths, runs = detect_datapoints(full_raw_path)
     total = len(datapaths)
     
-    x = load_data(datapaths[0], "   0 Time  0.00000E+00 y", expand_property_names(inputs), dims) # Eingaben aus der .h5 
-    # TODO: Was genau ist x, können wir's durch unsere Eingaben ersetzen
-    
-    # Was wird für x ausgelesen?
-    # ['Pressure Gradient [-]', 'Permeability X [m^2]', 'SDF', 'Material ID']
-    print(f"x.keys() = {x.keys()} \n")
+    # Eingaben laden:
+    x = dict()
+    x["Pressure Gradient [-]"] = torch.ones(list(dims)).float() * pressure
+    x["Permeability X [m^2]"] = torch.tensor(np.full(dims, permeability, order='F')).float()
+    x["SDF"] = torch.tensor(np.full(dims, 1, order='F')).float() 
+    x["SDF"][9][23][0] = 2
+    x["Material ID"] = x["SDF"]
 
-    # Daten für's Modell
-    data = dict()
-
-    # Druck laden
-    empty_field = torch.ones(list(dims)).float()
-    data["Pressure Gradient [-]"] = empty_field * pressure
-
-    # Durchlässigkeit laden
-    data["Permeability X [m^2]"] = torch.tensor(np.full((dims[0] * dims[1]), permeability).reshape(dims, order='F')).float()
-
-    # Material ID
-
-    mat_id = np.full((dims[0] * dims[1]), 1)
-    mat_id[469] = 2 # TODO: Auslesen
-    data["SDF"] = torch.tensor(mat_id.reshape(dims, order='F')).float() 
-    data["Material ID"] = data["SDF"]
-
-    x = data
-
-    y = load_data(datapaths[0], "   4 Time  2.75000E+01 y", ["Temperature [C]"], dims) # Ausgaben (Grundwahrheit) aus der .h5
-    # TODO: Ersetze mit Berechnung der Grundwahrheit abh. von Eingaben
+    y = gen.generate_groundtruth_closest(permeability, pressure)
 
     loc_hp = get_hp_location(x)
     x = transforms(x, loc_hp=loc_hp)
