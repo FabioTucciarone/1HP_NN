@@ -30,7 +30,7 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
     
 def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
 
-    pressure = -2.830821194764205056e-03
+    pressure = -1.830821194764205056e-03
     permeability = 2.646978938535798940e-10
 
     full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
@@ -41,10 +41,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     pflotran_settings = get_pflotran_settings(full_raw_path)
-
-    # Testweise ausgeben:
-    print(f"pflotran_settings = {pflotran_settings} \n")
-    print(f"dims = {pflotran_settings['grid']['ncells']} \n")
 
     dims = np.array(pflotran_settings["grid"]["ncells"])
     total_size = np.array(pflotran_settings["grid"]["size"])
