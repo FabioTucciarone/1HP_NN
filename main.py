@@ -12,6 +12,7 @@ from data_stuff.dataset import SimulationDataset, _get_splits
 from data_stuff.utils import SettingsTraining
 from networks.unet import UNet
 from preprocessing.prepare_1ststage import prepare_dataset_for_1st_stage
+from preprocessing.prepare_1ststage import prepare_demonstrator_input_1st_stage
 from utils.prepare_paths import set_paths_1hpnn, Paths1HP
 from utils.visualization import plt_avg_error_cellwise, plot_sample
 from utils.measurements import measure_loss, save_all_measurements
@@ -76,13 +77,26 @@ if __name__ == "__main__":
 
     run(settings)
 
-def run_from_demonstrator(dataset_raw: str, model: str, inputs = "gksi"):
-    """Facilitate calls from demonstrator app (Unfinished!!)"""
+def demonstrator_run_1st_stage(dataset_raw: str, model: str, permeability: float, pressure: float):
+    """ 
+    Method for easily running the first stage model on the inputs of the demonstrator app.
+
+    Parameters
+    ----------
+    dataset_raw: str
+        Name of "dataset" containing the settings.yaml file from which the pflortran settings are extracted.
+    model: str
+        Name of a gksi model.
+    permeability: float
+        The permeability input parameter of the demonstrator app.
+    pressure: float
+        The pressure input parameter of the demonstrator app.
+    """
 
     logging.basicConfig(level=logging.WARNING)
     settings = SettingsTraining(
         dataset_raw=dataset_raw,
-        inputs = inputs,
+        inputs = "gksi",
         device = "cpu",
         epochs = 10000,
         case = "test",
@@ -97,9 +111,7 @@ def run_from_demonstrator(dataset_raw: str, model: str, inputs = "gksi"):
     print(settings.datasets_dir + "\n")
     settings.dataset_prep = dataset_prep
 
-    # prepare dataset if test=case do it anyways because of potentially different std,mean,... values than trained with
-    prepare_dataset_for_1st_stage(paths, settings)
-    print(f"Dataset {paths.dataset_1st_prep_path} prepared")
+    prepare_demonstrator_input_1st_stage(paths, settings, permeability, pressure)
 
     settings.save()
 

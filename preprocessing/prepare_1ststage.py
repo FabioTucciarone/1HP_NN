@@ -26,13 +26,21 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
     # get info of training
     with open(os.path.join(os.getcwd(), settings.model, info_file), "r") as file:
         info = yaml.safe_load(file)
-    prepare_demonstrator_input(paths, settings.dataset_raw, settings.inputs, info=info) # TODO: ACHTUNG, ersetze prepare_dataset mit prepare_demonstrator_input für Backend-Tests
-    
-def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
+    prepare_dataset(paths, settings.dataset_raw, settings.inputs, info=info) # TODO: ACHTUNG, ersetze prepare_dataset mit prepare_demonstrator_input für Backend-Tests
 
-    pressure = -1.830821194764205056e-03
-    permeability = 2.646978938535798940e-10
 
+def prepare_demonstrator_input_1st_stage(paths: Paths1HP, settings: SettingsTraining, permeability: float, pressure: float):
+    # get info of training
+    with open(os.path.join(os.getcwd(), settings.model, "info.yaml"), "r") as file:
+        info = yaml.safe_load(file)
+    prepare_demonstrator_input(paths, settings.dataset_raw, permeability, pressure, info=info) 
+ 
+
+def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
+    """
+    Generate a prepared dataset directly from the input parameters of the demonstrator app.
+    The input preperation is based on the gksi-input with a fixed position.
+    """
     full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
     dataset_prepared_path = pathlib.Path(paths.dataset_1st_prep_path)
     dataset_prepared_path.mkdir(parents=True, exist_ok=True)
@@ -50,6 +58,8 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     datapaths, runs = detect_datapoints(full_raw_path)
     total = len(datapaths)
     
+    print(permeability)
+
     # Eingaben laden:
     x = dict()
     x["Pressure Gradient [-]"] = torch.ones(list(dims)).float() * pressure
