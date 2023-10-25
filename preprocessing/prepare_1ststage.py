@@ -51,7 +51,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     pflotran_settings = get_pflotran_settings(full_raw_path)
 
     dims = np.array(pflotran_settings["grid"]["ncells"])
-    total_size = np.array(pflotran_settings["grid"]["size"])
 
     tensor_transform = ToTensorTransform()
 
