@@ -46,8 +46,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     dataset_prepared_path.mkdir(parents=True, exist_ok=True)
     dataset_prepared_path.joinpath("Inputs").mkdir(parents=True, exist_ok=True)
     dataset_prepared_path.joinpath("Labels").mkdir(parents=True, exist_ok=True)
-
-    #TODO: Langsam
     
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     pflotran_settings = get_pflotran_settings(full_raw_path)
@@ -57,43 +55,30 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     cell_size = total_size/dims
 
     tensor_transform = ToTensorTransform()
-    datapaths, runs = detect_datapoints(full_raw_path)
-    total = len(datapaths)
-    
-    #TODO: Langsam ende
 
     # Eingaben laden:
     x = dict()
     x["Pressure Gradient [-]"] = torch.ones(list(dims)).float() * pressure
     x["Permeability X [m^2]"] = torch.tensor(np.full(dims, permeability, order='F')).float()
-    x["SDF"] = torch.tensor(np.full(dims, 1, order='F')).float() 
+    x["SDF"] = torch.ones(list(dims)).float() 
     x["SDF"][9][23][0] = 2
     x["Material ID"] = x["SDF"]
 
     y = gen.generate_groundtruth_closest(permeability, pressure)
 
     loc_hp = get_hp_location(x)
+
     x = transforms(x, loc_hp=loc_hp)
     x = tensor_transform(x)
     y = transforms(y, loc_hp=loc_hp)
     y = tensor_transform(y)
-    torch.save(x, os.path.join(dataset_prepared_path, "Inputs", f"{runs[0]}.pt"))
-    torch.save(y, os.path.join(dataset_prepared_path, "Labels", f"{runs[0]}.pt"))
-        
-    info["CellsNumberPrior"] = info["CellsNumber"]
-    info["PositionHPPrior"] = info["PositionLastHP"]
-    assert info["CellsSize"][:2] == cell_size.tolist()[:2], f"Cell size changed between given info.yaml {info['CellsSize']} and data {cell_size.tolist()}"        
-    info["CellsSize"] = cell_size.tolist()
-    # change of size possible; order of tensor is in any case the other way around
+    torch.save(x, os.path.join(dataset_prepared_path, "Inputs", f"RUN_0.pt"))
+    torch.save(y, os.path.join(dataset_prepared_path, "Labels", f"RUN_0.pt"))
+  
     assert 1 in y.shape, "y is not expected to have several output parameters"
     assert len(y.shape) == 3, "y is expected to be 2D"
-    dims = list(y.shape)[1:]
-    info["CellsNumber"] = dims
-    info["PositionLastHP"] = loc_hp.tolist()
-    with open(os.path.join(dataset_prepared_path, "info.yaml"), "w") as file:
-        yaml.dump(info, file)
 
-    normalize(dataset_prepared_path, info, total)
+    normalize(dataset_prepared_path, info, 1)
 
     return info
 
