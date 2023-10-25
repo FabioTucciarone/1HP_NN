@@ -47,6 +47,8 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     dataset_prepared_path.joinpath("Inputs").mkdir(parents=True, exist_ok=True)
     dataset_prepared_path.joinpath("Labels").mkdir(parents=True, exist_ok=True)
 
+    #TODO: Langsam
+    
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     pflotran_settings = get_pflotran_settings(full_raw_path)
 
@@ -58,7 +60,7 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     datapaths, runs = detect_datapoints(full_raw_path)
     total = len(datapaths)
     
-    print(permeability)
+    #TODO: Langsam ende
 
     # Eingaben laden:
     x = dict()
