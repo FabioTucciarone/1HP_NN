@@ -14,7 +14,7 @@ from networks.unet import UNet
 from preprocessing.prepare_1ststage import prepare_dataset_for_1st_stage
 from preprocessing.prepare_1ststage import prepare_demonstrator_input_1st_stage
 from utils.prepare_paths import set_paths_1hpnn, Paths1HP
-from utils.visualization import plt_avg_error_cellwise, plot_sample
+from utils.visualization import plt_avg_error_cellwise, plot_sample, get_plots
 from utils.measurements import measure_loss, save_all_measurements
 
 
@@ -36,7 +36,7 @@ def init_data(settings: SettingsTraining, seed=1):
     return dataset, dataloaders
 
 
-def run(settings: SettingsTraining, return_to_demonstrator=False):
+def run(settings: SettingsTraining):
 
     dataset, dataloaders = init_data(settings)
 
@@ -48,7 +48,7 @@ def run(settings: SettingsTraining, return_to_demonstrator=False):
 
     # visualization
     if settings.visualize:
-        return plot_sample(model, dataloaders["test"], settings.device, plot_name=settings.destination_dir + "/plot_test", amount_plots=5, pic_format="png", return_to_demonstrator=return_to_demonstrator)
+        plot_sample(model, dataloaders["test"], settings.device, plot_name=settings.destination_dir + "/plot_test", amount_plots=5, pic_format="png")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)

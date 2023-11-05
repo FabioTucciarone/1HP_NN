@@ -54,8 +54,79 @@ class DataToVisualize:
             self.name = "Permeability in [m$^2$]"
         elif self.name == "SDF":
             self.name = "SDF-transformed position in [-]"
-    
-def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: int = inf, plot_name: str = "default", pic_format: str = "png", return_to_demonstrator = False):
+
+
+def get_plots(model: UNet, dataloader: DataLoader, device: str):
+
+    st_prep = time.time()
+
+    norm = dataloader.dataset.dataset.norm
+    info = dataloader.dataset.dataset.info
+
+    st_load = time.time() 
+
+    inputs, labels = next(iter(dataloader)) # TODO: Langsam
+
+    et_load = time.time()
+    print('Load:', et_load - st_load, 'seconds') 
+
+    st_infer = time.time() 
+
+    # get data
+    x = inputs[0].to(device)
+    x = torch.unsqueeze(x, 0)
+    y = labels[0]
+
+    # inference
+    y_out = model(x).to(device)
+
+    et_infer = time.time() 
+    print('Inferenz:', et_infer - st_infer, 'seconds')
+
+    st_norm = time.time()
+
+    # reverse transform for plotting real values
+    x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
+    y = norm.reverse(y.detach().cpu(),"Labels")[0]
+    y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
+
+    et_norm = time.time()
+    print('Norm:', et_norm - st_norm, 'seconds')
+
+    st_dict = time.time()
+    # plot temperature true, temperature out, error, physical variables
+    temp_max = max(y.max(), y_out.max())
+    temp_min = min(y.min(), y_out.min())
+    extent_highs = (np.array(info["CellsSize"][:2]) * y.shape)
+    dict_to_plot = {
+        "t_true": DataToVisualize(y, "Label: Temperature in [°C]",extent_highs, {"vmax": temp_max, "vmin": temp_min}),
+        "t_out": DataToVisualize(y_out, "Prediction: Temperature in [°C]",extent_highs, {"vmax": temp_max, "vmin": temp_min}),
+        "error": DataToVisualize(torch.abs(y-y_out), "Absolute error in [°C]",extent_highs),
+    }
+    physical_vars = info["Inputs"].keys()
+    for physical_var in physical_vars:
+        index = info["Inputs"][physical_var]["index"]
+        dict_to_plot[physical_var] = DataToVisualize(
+            x[index], physical_var,extent_highs)
+    et_dict = time.time()
+    print('Dict:', et_dict - st_dict, 'seconds')
+
+    et_prep = time.time()
+    print('Grafikvorbereitung:', et_prep - st_prep, 'seconds')
+
+    st_draw = time.time()
+
+    predicted_temperature = get_predicted_temperature(dict_to_plot)
+    groundtruth_temperature = get_groundtruth_temperature(dict_to_plot)
+    error = get_error(dict_to_plot)
+
+    et_draw = time.time()
+    print('Grafikzit:', et_draw - st_draw, 'seconds')
+
+    return [predicted_temperature, groundtruth_temperature, error]
+
+
+def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: int = inf, plot_name: str = "default", pic_format: str = "png"):
     logging.warning("Plotting...")
 
     if amount_plots > len(dataloader.dataset):
@@ -100,22 +171,16 @@ def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: 
             name_pic = f"runs/{plot_name}_{current_id}"
             figsize_x = extent_highs[0]/extent_highs[1]*3
 
-            if return_to_demonstrator: 
-                predicted_temperature = get_predicted_temperature(dict_to_plot, pic_format=pic_format)
-                groundtruth_temperature = get_groundtruth_temperature(dict_to_plot, pic_format=pic_format)
-                error = get_error(dict_to_plot, pic_format=pic_format)
-                return [predicted_temperature, groundtruth_temperature, error]
-            else:
-                _plot_datafields(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
-                # _plot_isolines(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
-                # _isolines_measurements(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x)
-                # _plot_temperature_field(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
+            _plot_datafields(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
+            # _plot_isolines(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
+            # _isolines_measurements(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x)
+            # _plot_temperature_field(dict_to_plot, name_pic=name_pic, figsize_x=figsize_x, pic_format=pic_format)
 
             if current_id >= amount_plots-1:
                 return None
             current_id += 1
 
-def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str, pic_format: str = "png"):
+def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str):
     """Returns specified data field as a matplotlib-Figure object to simplify access by the demonstrator app"""
     datapoint = data[datafield_name]
     fig = Figure(figsize=(20, 2))
@@ -127,15 +192,15 @@ def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str, 
     # fig.savefig(f"pipipopo_{datafield_name}.{pic_format}", format=pic_format) # for testing
     return fig
 
-def get_predicted_temperature(data: Dict[str, DataToVisualize], pic_format: str = "png"):
+def get_predicted_temperature(data: Dict[str, DataToVisualize]):
     """Returns predicted temperature field for demonstrator app"""
     return get_datafield_figure(data, "t_out")
 
-def get_groundtruth_temperature(data: Dict[str, DataToVisualize], pic_format: str = "png"):
+def get_groundtruth_temperature(data: Dict[str, DataToVisualize]):
     """Returns groundtruth temperature field for demonstrator app"""
     return get_datafield_figure(data, "t_true")
 
-def get_error(data: Dict[str, DataToVisualize], pic_format: str = "png"):
+def get_error(data: Dict[str, DataToVisualize]):
     """Returns groundtruth temperature field for demonstrator app"""
     return get_datafield_figure(data, "error")
 
