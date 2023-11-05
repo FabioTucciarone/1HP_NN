@@ -56,44 +56,19 @@ class DataToVisualize:
             self.name = "SDF-transformed position in [-]"
 
 
-def get_plots(model: UNet, dataloader: DataLoader, device: str):
-
-    st_prep = time.time()
+def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, dataloader: DataLoader, device: str):
 
     norm = dataloader.dataset.dataset.norm
     info = dataloader.dataset.dataset.info
 
-    st_load = time.time() 
-
-    inputs, labels = next(iter(dataloader)) # TODO: Langsam
-
-    et_load = time.time()
-    print('Load:', et_load - st_load, 'seconds') 
-
-    st_infer = time.time() 
-
-    # get data
-    x = inputs[0].to(device)
     x = torch.unsqueeze(x, 0)
-    y = labels[0]
-
-    # inference
     y_out = model(x).to(device)
-
-    et_infer = time.time() 
-    print('Inferenz:', et_infer - st_infer, 'seconds')
-
-    st_norm = time.time()
 
     # reverse transform for plotting real values
     x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
     y = norm.reverse(y.detach().cpu(),"Labels")[0]
     y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
 
-    et_norm = time.time()
-    print('Norm:', et_norm - st_norm, 'seconds')
-
-    st_dict = time.time()
     # plot temperature true, temperature out, error, physical variables
     temp_max = max(y.max(), y_out.max())
     temp_min = min(y.min(), y_out.min())
@@ -106,13 +81,7 @@ def get_plots(model: UNet, dataloader: DataLoader, device: str):
     physical_vars = info["Inputs"].keys()
     for physical_var in physical_vars:
         index = info["Inputs"][physical_var]["index"]
-        dict_to_plot[physical_var] = DataToVisualize(
-            x[index], physical_var,extent_highs)
-    et_dict = time.time()
-    print('Dict:', et_dict - st_dict, 'seconds')
-
-    et_prep = time.time()
-    print('Grafikvorbereitung:', et_prep - st_prep, 'seconds')
+        dict_to_plot[physical_var] = DataToVisualize(x[index], physical_var,extent_highs)
 
     st_draw = time.time()
 

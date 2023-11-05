@@ -33,7 +33,7 @@ def prepare_demonstrator_input_1st_stage(paths: Paths1HP, settings: SettingsTrai
     # get info of training
     with open(os.path.join(os.getcwd(), settings.model, "info.yaml"), "r") as file:
         info = yaml.safe_load(file)
-    prepare_demonstrator_input(paths, settings.dataset_raw, permeability, pressure, info=info) 
+    return prepare_demonstrator_input(paths, settings.dataset_raw, permeability, pressure, info=info) 
  
 
 def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
@@ -76,7 +76,16 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     assert 1 in y.shape, "y is not expected to have several output parameters"
     assert len(y.shape) == 3, "y is expected to be 2D"
 
-    normalize(dataset_prepared_path, info, 1)
+    # begin normalize()
+
+    norm = NormalizeTransform(info)
+
+    x = norm(x,"Inputs")
+    y = norm(y,"Labels")
+
+    # end normalize()
+
+    return x, y
 
     return info
 
