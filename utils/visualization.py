@@ -56,10 +56,7 @@ class DataToVisualize:
             self.name = "SDF-transformed position in [-]"
 
 
-def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, device: str):
-
-    # norm = dataloader.dataset.dataset.norm
-    # info = dataloader.dataset.dataset.info
+def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, figures, device: str = "cpu"):
 
     x = torch.unsqueeze(x, 0)
     y_out = model(x).to(device)
@@ -85,14 +82,12 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, device:
 
     st_draw = time.time()
 
-    predicted_temperature = get_predicted_temperature(dict_to_plot)
-    groundtruth_temperature = get_groundtruth_temperature(dict_to_plot)
-    error = get_error(dict_to_plot)
+    figures.update_figure(0, dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
+    figures.update_figure(1, dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
+    figures.update_figure(2, dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
 
     et_draw = time.time()
     print('Grafikzit:', et_draw - st_draw, 'seconds')
-
-    return [predicted_temperature, groundtruth_temperature, error]
 
 
 def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: int = inf, plot_name: str = "default", pic_format: str = "png"):
@@ -161,20 +156,22 @@ def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str):
     axis.invert_yaxis()
     _aligned_colorbar(fig, axesImage)
     fig.tight_layout()
+
+    axesImage.set_data
     # fig.savefig(f"pipipopo_{datafield_name}.{pic_format}", format=pic_format) # for testing
     return fig
 
-def get_predicted_temperature(data: Dict[str, DataToVisualize]):
+def get_predicted_temperature(figure, data: Dict[str, DataToVisualize]):
     """Returns predicted temperature field for demonstrator app"""
-    return get_datafield_figure(data, "t_out")
+    return get_datafield_figure(figure, data, "t_out")
 
-def get_groundtruth_temperature(data: Dict[str, DataToVisualize]):
+def get_groundtruth_temperature(figure, data: Dict[str, DataToVisualize]):
     """Returns groundtruth temperature field for demonstrator app"""
-    return get_datafield_figure(data, "t_true")
+    return get_datafield_figure(figure, data, "t_true")
 
-def get_error(data: Dict[str, DataToVisualize]):
+def get_error(figure, data: Dict[str, DataToVisualize]):
     """Returns groundtruth temperature field for demonstrator app"""
-    return get_datafield_figure(data, "error")
+    return get_datafield_figure(figure, data, "error")
 
 
 def infer_all_and_summed_pic(model: UNet, dataloader: DataLoader, device: str):

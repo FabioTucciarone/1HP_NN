@@ -42,10 +42,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     The input preperation is based on the gksi-input with a fixed position.
     """
     full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
-    dataset_prepared_path = pathlib.Path(paths.dataset_1st_prep_path)
-    dataset_prepared_path.mkdir(parents=True, exist_ok=True)
-    dataset_prepared_path.joinpath("Inputs").mkdir(parents=True, exist_ok=True)
-    dataset_prepared_path.joinpath("Labels").mkdir(parents=True, exist_ok=True)
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     pflotran_settings = get_pflotran_settings(full_raw_path)
@@ -72,8 +68,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     x = tensor_transform(x)
     y = transforms(y, loc_hp=loc_hp)
     y = tensor_transform(y)
-    # torch.save(x, os.path.join(dataset_prepared_path, "Inputs", f"RUN_0.pt"))
-    # torch.save(y, os.path.join(dataset_prepared_path, "Labels", f"RUN_0.pt"))
   
     assert 1 in y.shape, "y is not expected to have several output parameters"
     assert len(y.shape) == 3, "y is expected to be 2D"
@@ -88,8 +82,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     dims = list(y.shape)[1:]
     info["CellsNumber"] = dims
     info["PositionLastHP"] = loc_hp.tolist()
-    with open(os.path.join(dataset_prepared_path, "info.yaml"), "w") as file:
-        yaml.dump(info, file)
 
     # begin normalize()
 
@@ -100,7 +92,7 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
 
     # end normalize()
 
-    return x, y, info
+    return x, y, info, norm
 
 
 def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
