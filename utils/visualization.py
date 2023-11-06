@@ -87,7 +87,7 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, figures
     figures.update_figure(2, dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
 
     et_draw = time.time()
-    print('Grafikzit:', et_draw - st_draw, 'seconds')
+    print('Grafikzeit:', et_draw - st_draw, 'seconds')
 
 
 def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: int = inf, plot_name: str = "default", pic_format: str = "png"):
