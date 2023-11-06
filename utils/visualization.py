@@ -56,10 +56,10 @@ class DataToVisualize:
             self.name = "SDF-transformed position in [-]"
 
 
-def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, dataloader: DataLoader, device: str):
+def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, device: str):
 
-    norm = dataloader.dataset.dataset.norm
-    info = dataloader.dataset.dataset.info
+    # norm = dataloader.dataset.dataset.norm
+    # info = dataloader.dataset.dataset.info
 
     x = torch.unsqueeze(x, 0)
     y_out = model(x).to(device)
@@ -152,8 +152,11 @@ def plot_sample(model: UNet, dataloader: DataLoader, device: str, amount_plots: 
 def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str):
     """Returns specified data field as a matplotlib-Figure object to simplify access by the demonstrator app"""
     datapoint = data[datafield_name]
+    st_draw = time.time()
     fig = Figure(figsize=(20, 2))
     axis = fig.add_subplot(1, 1, 1)
+    et_draw = time.time()
+    print('Figure:', et_draw - st_draw, 'seconds')
     axesImage = axis.imshow(datapoint.data.T, **datapoint.imshowargs)
     axis.invert_yaxis()
     _aligned_colorbar(fig, axesImage)
