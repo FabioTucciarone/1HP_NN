@@ -23,11 +23,26 @@ import generate_groundtruth as gen
 
 
 def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, info_file: str = "info.yaml"):
-    # get info of training
-    with open(os.path.join(os.getcwd(), settings.model, info_file), "r") as file:
-        info = yaml.safe_load(file)
-    prepare_dataset(paths, settings.dataset_raw, settings.inputs, info=info) # TODO: ACHTUNG, ersetze prepare_dataset mit prepare_demonstrator_input für Backend-Tests
+    time_begin = time.perf_counter()
 
+    if settings.case == "test" or settings.case_2hp:
+        # get info of training
+        with open(settings.model / info_file, "r") as file:
+            info = yaml.safe_load(file)
+        prepare_dataset(paths, settings.inputs, info=info)
+    else:
+        info = prepare_dataset(paths, settings.inputs)
+        if settings.case == "train":
+            # store info of training
+            with open(settings.destination / info_file, "w") as file:
+                yaml.safe_dump(info, file)
+
+    time_end = time.perf_counter() - time_begin
+    with open(paths.dataset_1st_prep_path / "preparation_time.yaml", "w") as file:
+        yaml.safe_dump(
+            {"timestamp of end": time.ctime(), 
+                "duration of whole process in seconds": time_end}, file)
+        
 
 def prepare_demonstrator_input_1st_stage(paths: Paths1HP, settings: SettingsTraining, permeability: float, pressure: float):
     # get info of training
@@ -95,7 +110,7 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: s
     return x, y, info, norm
 
 
-def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs: str, power2trafo: bool = True, info:dict = None):
+def prepare_dataset(paths: Union[Paths1HP, Paths2HP], inputs: str, power2trafo: bool = True, info:dict = None):
     """
     Create a dataset from the raw pflotran data in raw_data_path.
     The saved dataset is normalized using the mean and standard deviation, which are saved to info.yaml in the new dataset folder.
@@ -110,40 +125,68 @@ def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs:
             Name of the raw data. This will also be the name of the new dataset.
         input_variables : str
             String of characters, each of which is either x, y, z, p, t, k, i, s, g.
+            TODO make g (pressure gradient cell-size independent?)
     """
-    full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
+    time_start = time.perf_counter()
+    check_for_dataset(paths.raw_path)
     dataset_prepared_path = pathlib.Path(paths.dataset_1st_prep_path)
     dataset_prepared_path.mkdir(parents=True, exist_ok=True)
-    dataset_prepared_path.joinpath("Inputs").mkdir(parents=True, exist_ok=True)
+    dataset_prepared_path.joinpath("Inputs").mkdir(parents=True, exist_ok=True) # TODO
     dataset_prepared_path.joinpath("Labels").mkdir(parents=True, exist_ok=True)
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     inputs = expand_property_names(inputs)
     time_first = "   0 Time  0.00000E+00 y"
+    time_final = "   3 Time  5.00000E+00 y"
     time_steady_state = "   4 Time  2.75000E+01 y"
-    pflotran_settings = get_pflotran_settings(full_raw_path)
+    pflotran_settings = get_pflotran_settings(paths.raw_path)
     dims = np.array(pflotran_settings["grid"]["ncells"])
     total_size = np.array(pflotran_settings["grid"]["size"])
     cell_size = total_size/dims
 
+    if info is None: calc = WelfordStatistics()
     tensor_transform = ToTensorTransform()
     output_variables = ["Temperature [C]"]
-    datapaths, runs = detect_datapoints(full_raw_path)
-    total = len(datapaths)
-    for datapath, run in tqdm(zip(datapaths, runs), desc="Converting", total=total):
-        x = load_data(datapath, time_first, inputs, dims)
-        y = load_data(datapath, time_steady_state, output_variables, dims)
+    data_paths, runs = detect_datapoints(paths.raw_path)
+    total = len(data_paths)
+    for data_path, run in tqdm(zip(data_paths, runs), desc="Converting", total=total):
+        x = load_data(data_path, time_first, inputs, dims)
+        y = load_data(data_path, time_steady_state, output_variables, dims)
         loc_hp = get_hp_location(x)
         x = transforms(x, loc_hp=loc_hp)
+        if info is None: calc.add_data(x) 
         x = tensor_transform(x)
         y = transforms(y, loc_hp=loc_hp)
+        if info is None: calc.add_data(y)
         y = tensor_transform(y)
         torch.save(x, os.path.join(dataset_prepared_path, "Inputs", f"{run}.pt"))
         torch.save(y, os.path.join(dataset_prepared_path, "Labels", f"{run}.pt"))
         
-    info["CellsNumberPrior"] = info["CellsNumber"]
-    info["PositionHPPrior"] = info["PositionLastHP"]
-    assert info["CellsSize"][:2] == cell_size.tolist()[:2], f"Cell size changed between given info.yaml {info['CellsSize']} and data {cell_size.tolist()}"        
+    if info is not None: 
+        info["CellsNumberPrior"] = info["CellsNumber"]
+        info["PositionHPPrior"] = info["PositionLastHP"]
+        assert info["CellsSize"][:2] == cell_size.tolist()[:2], f"Cell size changed between given info.yaml {info['CellsSize']} and data {cell_size.tolist()}"
+    else:
+        info = dict()
+        means = calc.mean()
+        stds = calc.std()
+        mins = calc.min()
+        maxs = calc.max()
+        info["Inputs"] = {key: {"mean": means[key],
+                                "std": stds[key],
+                                "min": mins[key],
+                                "max": maxs[key],
+                                "norm": get_normalization_type(key),
+                                "index": n}
+                        for n, key in enumerate(inputs)}
+        info["Labels"] = {key: {"mean": means[key],
+                                "std": stds[key],
+                                "min": mins[key],
+                                "max": maxs[key],
+                                "norm": get_normalization_type(key),
+                                "index": n}
+                        for n, key in enumerate(output_variables)}
+        
     info["CellsSize"] = cell_size.tolist()
     # change of size possible; order of tensor is in any case the other way around
     assert 1 in y.shape, "y is not expected to have several output parameters"
@@ -151,28 +194,32 @@ def prepare_dataset(paths: Union[Paths1HP, Paths2HP], dataset_name: str, inputs:
     dims = list(y.shape)[1:]
     info["CellsNumber"] = dims
     info["PositionLastHP"] = loc_hp.tolist()
-    with open(os.path.join(dataset_prepared_path, "info.yaml"), "w") as file:
+    # info["PositionLastHP"] = get_hp_location_from_tensor(x, info)
+    with open(dataset_prepared_path / "info.yaml", "w") as file:
         yaml.dump(info, file)
 
     normalize(dataset_prepared_path, info, total)
+    
+    time_end = time.perf_counter()
+    with open(dataset_prepared_path / "args.yaml", "w") as f:
+        yaml.dump({"dataset":paths.raw_path.name, "inputs": inputs}, f, default_flow_style=False)
+        f.write(f"Duration for preparation in sec: {time_end-time_start}")
 
     return info
 
 ## helper functions
-def check_for_dataset(path: str, name: str) -> str:
+def check_for_dataset(path: pathlib.Path) -> str:
     """
     Check if the dataset exists and is not empty.
     Dataset should be in the following folder self.dataset_path/<dataset_name>
     """
-    dataset_path_full = os.path.join(path, name)
-    if not os.path.exists(dataset_path_full):
+    if not path.exists():
         raise ValueError(
-            f"Dataset {name} does not exist in {dataset_path_full}")
-    if len(os.listdir(dataset_path_full)) == 0:
-        raise ValueError(f"Dataset {name} is empty")
-    return dataset_path_full
+            f"Dataset {path.name} does not exist in {path}")
+    if not any(path.iterdir()):
+        raise ValueError(f"Dataset {path.name} is empty")
 
-def detect_datapoints(raw_dataset_path: str):
+def detect_datapoints(dataset_path_raw: pathlib.Path):
     """
     Create the simulation dataset by preparing a list of samples
     Simulation data are sorted in an ascending order by run number
@@ -182,15 +229,12 @@ def detect_datapoints(raw_dataset_path: str):
     """
     set_data_paths_runs, runs = [], []
     found_dataset = False
-    raw_dataset_path = pathlib.Path(raw_dataset_path)
 
-    logging.info(f"Directory of currently used dataset is: {raw_dataset_path}")
-    for _, folders, _ in os.walk(raw_dataset_path):
-        for folder in folders:
-            for file in os.listdir(raw_dataset_path.joinpath(folder)):
-                if file == "pflotran.h5":
-                    set_data_paths_runs.append(
-                        (folder, raw_dataset_path.joinpath(folder, file)))
+    for folder in dataset_path_raw.iterdir():
+        if folder.is_dir():
+            for file in folder.iterdir():
+                if file.name == "pflotran.h5":
+                    set_data_paths_runs.append((folder.name, file))
                     found_dataset = True
     # Sort the data and runs in ascending order
     set_data_paths_runs = sorted(
@@ -198,8 +242,7 @@ def detect_datapoints(raw_dataset_path: str):
     runs = [data_path[0] for data_path in set_data_paths_runs]
     data_paths = [data_path[1] for data_path in set_data_paths_runs]
     if not found_dataset:
-        raise ValueError(f"No dataset found in {raw_dataset_path}")
-    assert len(data_paths) == len(runs)
+        raise ValueError(f"No dataset found in {dataset_path_raw}")
 
     return data_paths, runs
 
@@ -241,9 +284,8 @@ def get_normalization_type(property:str):
     else:
         return types["default"]
 
-def get_pflotran_settings(raw_dataset_path: str):
-    raw_dataset_path = pathlib.Path(raw_dataset_path)
-    with open(raw_dataset_path.joinpath("inputs", "settings.yaml"), "r") as f:
+def get_pflotran_settings(dataset_path_raw: str):
+    with open(dataset_path_raw / "inputs" / "settings.yaml", "r") as f:
         pflotran_settings = yaml.safe_load(f)
     return pflotran_settings
 
@@ -293,8 +335,8 @@ def get_hp_location_from_tensor(data: torch.Tensor, info: dict):
     return loc_hp
 
 def get_pressure_gradient(data_path):
-    pressure_grad_file = data_path.parent.joinpath("pressure_gradient.txt")
-    pressure_grad_file_interim = data_path.parent.joinpath("interim_pressure_gradient.txt")
+    pressure_grad_file = data_path.parent / "pressure_gradient.txt"
+    pressure_grad_file_interim = data_path.parent / "interim_pressure_gradient.txt"
     try:
         with open(pressure_grad_file, "r") as f:
             pressure_grad = f.read().split()[1:]

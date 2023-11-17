@@ -15,12 +15,28 @@
 - run main.py:
 
     ```
-    python main.py --dataset NAME_OF_DATASET --model PATH_TO_MODEL (after "runs/")
+    python main.py --dataset NAME_OF_DATASET --case test --model PATH_TO_MODEL (after "runs/")
     
     optional arguments:
     --inputs: make sure, they are the same as in the model (default `gksi`)
     --visualize: visualize the results (default `False`)
     ```
+## Training / Inferring a 2nd stage model (2HP-NN):
+- for running a 2HP-NN you need the prepared 2HP-dataset in datasets_prepared_dir_2hp
+- for preparing 2HP-NN: expects that 1HP-NN exists and trained on; for 2HP-NN (including preparation) run main.py with the following arguments:
+
+    ```
+    python main.py --dataset NAME_OF_DATASET --case_2hp True --inputs INPUTS (rather preparation case from 1HP-NN, e.g. 'gksi1000')
+    ```
+    more information on required arguments:
+    --inputs: make sure, they are the same as in the model (default `gksi`) + the number of datapoints (e.g. gksi1000)
+
+    optional arguments:
+    --visualize: visualize the results (default `False`)
+    --case: `test`, `train` or `finetune` (default `train`), if not `train` then --model is required:
+    --model PATH_TO_2HPNN_MODEL (after "runs/") 
+
+
 ## Exemplary paths.yaml file:
 
     ```
@@ -44,3 +60,7 @@
     sudo modprobe nvidia_uvm`
 
     if it does not help, you have to reboot
+
+# important commits
+- directly after paper submission (Oct. '23): cdc41426184756b9b1870e5c0f52d399bee0fae0
+- after clean up, one month after paper submission (Oct. '23): c8da3da
