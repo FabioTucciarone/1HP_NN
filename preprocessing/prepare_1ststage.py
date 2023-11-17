@@ -48,18 +48,18 @@ def prepare_demonstrator_input_1st_stage(paths: Paths1HP, settings: SettingsTrai
     # get info of training
     with open(os.path.join(os.getcwd(), settings.model, "info.yaml"), "r") as file:
         info = yaml.safe_load(file)
-    return prepare_demonstrator_input(paths, settings.dataset_raw, permeability, pressure, info=info) 
+    return prepare_demonstrator_input(paths, permeability, pressure, info=info) 
  
-
-def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], dataset_name: str, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
+ 
+def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
     """
     Generate a prepared dataset directly from the input parameters of the demonstrator app.
     The input preperation is based on the gksi-input with a fixed position.
     """
-    full_raw_path = check_for_dataset(paths.raw_dir, dataset_name)
+    check_for_dataset(paths.raw_path)
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
-    pflotran_settings = get_pflotran_settings(full_raw_path)
+    pflotran_settings = get_pflotran_settings(paths.raw_path)
 
     dims = np.array(pflotran_settings["grid"]["ncells"])
     total_size = np.array(pflotran_settings["grid"]["size"])
@@ -285,7 +285,7 @@ def get_normalization_type(property:str):
         return types["default"]
 
 def get_pflotran_settings(dataset_path_raw: str):
-    with open(dataset_path_raw / "inputs" / "settings.yaml", "r") as f:
+    with open(os.path.join(dataset_path_raw, "inputs", "settings.yaml"), "r") as f:
         pflotran_settings = yaml.safe_load(f)
     return pflotran_settings
 
