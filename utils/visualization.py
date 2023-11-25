@@ -118,6 +118,7 @@ def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_data
             dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
 
             plot_datafields(dict_to_plot, settings_pic)
+            plt.show()
             plot_isolines(dict_to_plot, settings_pic)
             # measure_len_width_1K_isoline(dict_to_plot)
 
@@ -210,7 +211,7 @@ def get_datafield_figure(data: Dict[str, DataToVisualize], datafield_name: str):
     print('Figure:', et_draw - st_draw, 'seconds')
     axesImage = axis.imshow(datapoint.data.T, **datapoint.imshowargs)
     axis.invert_yaxis()
-    _aligned_colorbar(fig, axesImage)
+    aligne_colorbar_to_figure(fig, axesImage)
     fig.tight_layout()
 
     axesImage.set_data
@@ -287,6 +288,6 @@ def _aligned_colorbar(*args, **kwargs):
         "right", size=0.3, pad=0.05)
     plt.colorbar(*args, cax=cax, **kwargs)
 
-def _aligned_colorbar(figure: Figure, mappable, *args, **kwargs):
+def aligne_colorbar_to_figure(figure: Figure, mappable, *args, **kwargs):
     cax = make_axes_locatable(figure.gca()).append_axes("right", size=0.3, pad=0.05)
     figure.colorbar(mappable, *args, cax=cax, **kwargs)

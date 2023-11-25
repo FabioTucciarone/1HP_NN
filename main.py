@@ -27,7 +27,7 @@ def init_data(settings: SettingsTraining, seed=1):
     generator = torch.Generator().manual_seed(seed)
 
     split_ratios = [0.7, 0.2, 0.1]
-    # split_ratios = [0.0, 0.0, 1.0] 
+    split_ratios = [0.0, 0.0, 1.0] # TODO [BAFO]: Bessere Unterteilung!
     datasets = random_split(dataset, _get_splits(len(dataset), split_ratios), generator=generator)
 
     dataloaders = {}
@@ -107,7 +107,7 @@ def run(settings: SettingsTraining):
 
     # visualization
     if settings.visualize:
-        which_dataset = "val"
+        which_dataset = "test" # TODO [BAFO]: ursprünglich "val"
         pic_format = "png"
         visualizations(model, dataloaders[which_dataset], settings.device, plot_path=settings.destination / f"plot_{which_dataset}", amount_datapoints_to_visu=1, pic_format=pic_format)
         times[f"avg_inference_time of {which_dataset}"], summed_error_pic = infer_all_and_summed_pic(model, dataloaders[which_dataset], settings.device)
