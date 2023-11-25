@@ -29,6 +29,7 @@ class SettingsTraining:
     finetune: bool = False
     model: str = None
     test: bool = False
+    case_2hp: bool = False
     visualize: bool = False
     
     def __post_init__(self):
