@@ -43,19 +43,14 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
             {"timestamp of end": time.ctime(), 
                 "duration of whole process in seconds": time_end}, file)
         
-
-def prepare_demonstrator_input_1st_stage(paths: Paths1HP, settings: SettingsTraining, groundtruth_info: gt.GroundTruthInfo, permeability: float, pressure: float):
-    # get info of training
-    with open(os.path.join(os.getcwd(), settings.model, "info.yaml"), "r") as file:
-        info = yaml.safe_load(file)
-    return prepare_demonstrator_input(paths, groundtruth_info, permeability, pressure, info=info) 
- 
  
 def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_info: gt.GroundTruthInfo, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
     """
     Generate a prepared dataset directly from the input parameters of the demonstrator app.
     The input preperation is based on the gksi-input with a fixed position.
     """
+
+    info = info.copy() # TODO: Nötig wegen gleichzeitigen Zugriffen?
     check_for_dataset(paths.raw_path)
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)

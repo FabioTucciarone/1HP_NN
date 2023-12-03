@@ -21,8 +21,7 @@ from domain_classes.stitching import Stitching
 
 
 class Domain:
-    def __init__(
-        self, info_path: str, stitching_method: str = "max", file_name: str = "RUN_0.pt", device = "cpu"):
+    def __init__(self, info_path: str, stitching_method: str = "max", file_name: str = "RUN_0.pt", device = "cpu"):
         self.skip_datapoint = False
         self.info = load_yaml(info_path, "info")
         self.size: tuple[int, int] = [

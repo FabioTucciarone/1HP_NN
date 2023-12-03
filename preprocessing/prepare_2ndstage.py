@@ -10,12 +10,50 @@ from torch import stack, load, unsqueeze, save, Tensor
 from tqdm.auto import tqdm
 
 from networks.unet import UNet
+import preprocessing.prepare_1ststage as prep_1hp
 from preprocessing.prepare_1ststage import prepare_dataset
 from domain_classes.domain import Domain
 from domain_classes.heat_pump import HeatPump
 from domain_classes.utils_2hp import save_config_of_separate_inputs, save_config_of_merged_inputs, save_yaml
 from domain_classes.stitching import Stitching
 from utils.prepare_paths import Paths2HP
+
+
+def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groundtruth_info, device: str = "cuda:0"):
+    """
+    assumptions:
+    - 1hp-boxes are generated already
+    - 1hpnn is trained
+    - cell sizes of 1hp-boxes and domain are the same
+    - boundaries of boxes around at least one hp is within domain
+    - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
+    """
+
+    model_1HP = UNet(in_channels=len(inputs_1hp)).float()
+    model_1HP.load(paths.model_1hp_path, device)
+    
+    ## prepare 2hp dataset for 1st stage  
+    with open(paths.dataset_model_trained_with_prep_path / "info.yaml", "r") as file: # norm with data from dataset that NN was trained with!!
+        info = yaml.safe_load(file)
+    prepare_dataset(paths, inputs_1hp, info=info, power2trafo=False)
+    print(f"Domain prepared ({paths.dataset_1st_prep_path})")
+
+
+    # Zwei Datenpunkte:
+    # prep_1hp.prepare_demonstrator_input(paths, groundtruth_info, -2.354183660481613122e-03, 9.921513056473029286e-11, info)
+    # prep_1hp.prepare_demonstrator_input(paths, groundtruth_info, -2.088833953514686054e-03, 3.882683654233747158e-11, info)
+
+
+    # for each run, load domain and 1hp-boxes
+    domain = Domain(paths.dataset_1st_prep_path, stitching_method="max", file_name="RUN_0.pt")
+    if domain.skip_datapoint: logging.warning(f"Skipping {0}")
+    single_hps = domain.extract_hp_boxes(device)
+    single_hps, _ = prepare_hp_boxes(paths, model_1HP, single_hps, domain, 0, save_bool=False) # apply learned NN to predict the heat plumes
+
+    # save infos of info file about separated (only 2!) inputs
+    # save_config_of_separate_inputs(domain.info, path=paths.datasets_boxes_prep_path)
+
+    return domain, single_hps
 
 
 def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str = "cuda:0"):

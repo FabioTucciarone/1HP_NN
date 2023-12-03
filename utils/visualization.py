@@ -22,6 +22,10 @@ from utils.measurements import measure_len_width_1K_isoline
 mpl.rcParams.update({'figure.max_open_warning': 0})
 plt.rcParams['figure.figsize'] = [8, 2.5]
 
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forschungsprojekt-pumpen-demonstrator", "demonstrator_backend"))
+import model_communication as mc
 # TODO: look at vispy library for plotting 3D data
 
 @dataclass
@@ -59,7 +63,7 @@ class DataToVisualize:
             self.name = "SDF-transformed position in [-]"
 
 
-def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, figures, device: str = "cpu"):
+def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, device: str = "cpu"):
 
     x = torch.unsqueeze(x, 0)
     y_out = model(x).to(device)
@@ -83,14 +87,13 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, figures
         index = info["Inputs"][physical_var]["index"]
         dict_to_plot[physical_var] = DataToVisualize(x[index], physical_var,extent_highs)
 
-    st_draw = time.time()
 
-    figures.update_figure(0, dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
-    figures.update_figure(1, dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
-    figures.update_figure(2, dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
+    display_data = mc.DisplayData()
+    display_data.set_figure(0, dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
+    display_data.set_figure(1, dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
+    display_data.set_figure(2, dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
 
-    et_draw = time.time()
-    print('Grafikzeit:', et_draw - st_draw, 'seconds')
+    return display_data
 
 
 def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
@@ -118,7 +121,7 @@ def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_data
             dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
 
             plot_datafields(dict_to_plot, settings_pic)
-            plt.show()
+            plt.show() # TODO [BAFO]: Bessere Unterteilung!
             plot_isolines(dict_to_plot, settings_pic)
             # measure_len_width_1K_isoline(dict_to_plot)
 
