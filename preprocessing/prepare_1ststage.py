@@ -19,6 +19,7 @@ from utils.prepare_paths import Paths1HP, Paths2HP
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forschungsprojekt-pumpen-demonstrator", "demonstrator_backend"))
+from groundtruth_data import GroundTruthInfo
 import generate_groundtruth as gt
 
 
@@ -44,7 +45,7 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
                 "duration of whole process in seconds": time_end}, file)
         
  
-def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_info: gt.GroundTruthInfo, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
+def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_info: GroundTruthInfo, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
     """
     Generate a prepared dataset directly from the input parameters of the demonstrator app.
     The input preperation is based on the gksi-input with a fixed position.
