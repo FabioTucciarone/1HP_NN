@@ -6,6 +6,10 @@ from typing import List
 import time
 import yaml
 
+import torch # TODO: [BAFO]
+from data_stuff.utils import load_yaml # TODO: [BAFO]
+import domain_classes.domain as domain
+
 from torch import stack, load, unsqueeze, save, Tensor
 from tqdm.auto import tqdm
 
@@ -33,10 +37,10 @@ def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groun
     model_1HP.load(paths.model_1hp_path, device)
     
     ## prepare 2hp dataset for 1st stage  
-    with open(paths.dataset_model_trained_with_prep_path / "info.yaml", "r") as file: # norm with data from dataset that NN was trained with!!
-        info = yaml.safe_load(file)
-    prepare_dataset(paths, inputs_1hp, info=info, power2trafo=False)
-    print(f"Domain prepared ({paths.dataset_1st_prep_path})")
+    # with open(paths.dataset_model_trained_with_prep_path / "info.yaml", "r") as file: # norm with data from dataset that NN was trained with!!
+    #     info = yaml.safe_load(file)
+    #prepare_dataset(paths, inputs_1hp, info=info, power2trafo=False) #TODO: Muss vorbereitet vorliegen!!!!!
+    # print(f"Domain prepared ({paths.dataset_1st_prep_path})")
 
 
     # Zwei Datenpunkte:
@@ -45,15 +49,92 @@ def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groun
 
 
     # for each run, load domain and 1hp-boxes
-    domain = Domain(paths.dataset_1st_prep_path, stitching_method="max", file_name="RUN_0.pt")
-    if domain.skip_datapoint: logging.warning(f"Skipping {0}")
-    single_hps = domain.extract_hp_boxes(device)
-    single_hps, _ = prepare_hp_boxes(paths, model_1HP, single_hps, domain, 0, save_bool=False) # apply learned NN to predict the heat plumes
+    run_file = "RUN_0.pt"
+    domain = Domain(paths.dataset_1st_prep_path, stitching_method="max", file_name=run_file) # Domäne von Punkt 0
+    # if domain.skip_datapoint: logging.warning(f"Skipping {0}") # Pressure Gradient [-] oder Permeability X [m^2] nicht in [0,1]
+
+    single_hps, inputs, label = prep2_test(paths, run_file)
+    # single_hps = domain.extract_hp_boxes(device=device)
+
+    run_id = f'{run_file.split(".")[0]}_'
+    single_hps, _ = prepare_hp_boxes(paths, model_1HP, single_hps, domain, run_id, save_bool=True) # apply learned NN to predict the heat plumes
+
 
     # save infos of info file about separated (only 2!) inputs
     # save_config_of_separate_inputs(domain.info, path=paths.datasets_boxes_prep_path)
 
     return domain, single_hps
+
+# test
+def get_name_from_index(index: int, info):
+        for property, values in info["Inputs"].items():
+            if values["index"] == index:
+                return property
+
+
+# Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
+def prep2_test(paths, file_name):
+
+    # __init__
+
+    info_path = paths.dataset_1st_prep_path
+    info = load_yaml(info_path, "info")
+    size: tuple[int, int] = [info["CellsNumber"][0], info["CellsNumber"][1],]  # (x, y), cell-ids
+    background_temperature: float = 10.6
+
+    file_path = os.path.join(info_path, "Inputs", file_name)
+    inputs = load(file_path)
+    file_path = os.path.join(info_path, "Labels", file_name)
+    label = load(file_path)
+
+    prediction: torch.tensor = (torch.ones(size) * background_temperature).to("cpu")
+    stitching: Stitching = Stitching("max", background_temperature)
+    normed_label: bool = True
+    file_name: str = file_name
+
+    field_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
+    p_related_field = inputs[field_idx, :, :]
+
+    # extract_hp_boxes
+
+    field_idx = info["Inputs"]["Material ID"]["index"]
+    material_ids = inputs[field_idx, :, :]
+
+    size_hp_box = torch.tensor([info["CellsNumberPrior"][0],info["CellsNumberPrior"][1],])
+    distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
+    hp_boxes = []
+    pos_hps = torch.stack(list(torch.where(material_ids == torch.max(material_ids))), dim=0).T
+    print(f"pos hp: f{pos_hps}")
+    names_inputs = [get_name_from_index(i, info) for i in range(inputs.shape[0])] #TODO: was ist das?
+
+    for idx in range(len(pos_hps)):
+        try:
+            pos_hp = pos_hps[idx]
+
+            corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:], run_name=file_name,)
+            
+            tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
+            tmp_label = label[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
+
+
+            tmp_mat_ids = torch.stack(list(torch.where(tmp_input == torch.max(material_ids))), dim=0).T
+            if len(tmp_mat_ids) > 1:
+                for i in range(len(tmp_mat_ids)):
+                    tmp_pos = tmp_mat_ids[i]
+                    if (tmp_pos[1:2] != distance_hp_corner).all():
+                        tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
+
+            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=names_inputs, dist_corner_hp=distance_hp_corner, label=tmp_label, device="cpu",)
+  
+            if "SDF" in info["Inputs"]:
+                tmp_hp.recalc_sdf(info)
+
+            hp_boxes.append(tmp_hp)
+            logging.info(f"HP BOX at {pos_hp} is with ({corner_ll}, {corner_ur}) in domain")
+        except:
+            logging.warning(f"BOX of HP {idx} at {pos_hp} is not in domain")
+                
+    return hp_boxes, inputs, label
 
 
 def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str = "cuda:0"):

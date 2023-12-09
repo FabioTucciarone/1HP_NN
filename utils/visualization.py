@@ -73,20 +73,7 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     y = norm.reverse(y.detach().cpu(),"Labels")[0]
     y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
 
-    # plot temperature true, temperature out, error, physical variables
-    temp_max = max(y.max(), y_out.max())
-    temp_min = min(y.min(), y_out.min())
-    extent_highs = (np.array(info["CellsSize"][:2]) * y.shape)
-    dict_to_plot = {
-        "t_true": DataToVisualize(y, "Label: Temperature in [°C]",extent_highs, {"vmax": temp_max, "vmin": temp_min}),
-        "t_out": DataToVisualize(y_out, "Prediction: Temperature in [°C]",extent_highs, {"vmax": temp_max, "vmin": temp_min}),
-        "error": DataToVisualize(torch.abs(y-y_out), "Absolute error in [°C]",extent_highs),
-    }
-    physical_vars = info["Inputs"].keys()
-    for physical_var in physical_vars:
-        index = info["Inputs"][physical_var]["index"]
-        dict_to_plot[physical_var] = DataToVisualize(x[index], physical_var,extent_highs)
-
+    dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
 
     display_data = mc.DisplayData(color_palette)
     display_data.set_figure(0, dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
@@ -94,6 +81,53 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     display_data.set_figure(2, dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
 
     return display_data
+
+
+def visualizations_demonstrator(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
+
+    # if amount_datapoints_to_visu > len(dataloader.dataset):
+    #     amount_datapoints_to_visu = len(dataloader.dataset)
+
+    norm = dataloader.dataset.dataset.norm
+    info = dataloader.dataset.dataset.info
+    model.eval()
+    settings_pic = {"format": pic_format}
+
+    current_id = 0
+    # for inputs, labels in dataloader:
+        # len_batch = inputs.shape[0]
+    len_batch = 1 # inputss.shape[0] != 1?
+
+    for inputs, labels in dataloader:
+        len_batch = inputs.shape[0]
+        for datapoint_id in range(1):
+            settings_pic["name"] = f"{plot_path}_{current_id}"
+
+            x = torch.unsqueeze(inputs[datapoint_id].to(device), 0)
+            #y = labels[datapoint_id]
+            y_out = model(x).to(device)
+
+            x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
+            y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
+
+            dict_to_plot = prepare_data_to_plot(x, y_out, y_out, info)
+
+            fig, axes = plt.subplots(1, 1)
+            
+            plt.title("OUT")
+
+            plt.imshow(dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
+            plt.gca().invert_yaxis()
+
+            plt.ylabel("x [m]")
+            _aligned_colorbar()
+
+            plt.xlabel("y [m]")
+            plt.tight_layout()
+
+            plt.show() # TODO [BAFO]: Bessere Unterteilung!
+            # plot_isolines(dict_to_plot, settings_pic)
+            # measure_len_width_1K_isoline(dict_to_plot)
 
 
 def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
