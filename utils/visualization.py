@@ -79,6 +79,7 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     display_data.set_figure(0, dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
     display_data.set_figure(1, dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
     display_data.set_figure(2, dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
+    display_data.average_error = torch.mean(torch.abs(y_out - y)).item()
 
     return display_data
 
