@@ -36,34 +36,25 @@ def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groun
     model_1HP = UNet(in_channels=len(inputs_1hp)).float()
     model_1HP.load(paths.model_1hp_path, device)
     
-    ## prepare 2hp dataset for 1st stage  
-    # with open(paths.dataset_model_trained_with_prep_path / "info.yaml", "r") as file: # norm with data from dataset that NN was trained with!!
-    #     info = yaml.safe_load(file)
     #prepare_dataset(paths, inputs_1hp, info=info, power2trafo=False) #TODO: Muss vorbereitet vorliegen!!!!!
-    # print(f"Domain prepared ({paths.dataset_1st_prep_path})")
 
-
-    # Zwei Datenpunkte:
-    # prep_1hp.prepare_demonstrator_input(paths, groundtruth_info, -2.354183660481613122e-03, 9.921513056473029286e-11, info)
-    # prep_1hp.prepare_demonstrator_input(paths, groundtruth_info, -2.088833953514686054e-03, 3.882683654233747158e-11, info)
-
-
-    # for each run, load domain and 1hp-boxes
     run_file = "RUN_0.pt"
     domain = Domain(paths.dataset_1st_prep_path, stitching_method="max", file_name=run_file) # Domäne von Punkt 0
+    print(f"prepare:  Domäne von {run_file} aus {paths.dataset_1st_prep_path}")
     # if domain.skip_datapoint: logging.warning(f"Skipping {0}") # Pressure Gradient [-] oder Permeability X [m^2] nicht in [0,1]
 
     single_hps, inputs, label = prep2_test(paths, run_file)
     # single_hps = domain.extract_hp_boxes(device=device)
 
-    run_id = f'{run_file.split(".")[0]}_'
-    single_hps, _ = prepare_hp_boxes(paths, model_1HP, single_hps, domain, run_id, save_bool=True) # apply learned NN to predict the heat plumes
-
+    # run_id = f'{run_file.split(".")[0]}_'
+    hp_inputs = prepare_hp_boxes_demonstrator(paths, model_1HP, single_hps, domain) # apply learned NN to predict the heat plumes
+    print(f"prepare:  inputs.shape = {inputs.shape}")
+    print(f"prepare:  hp_inputs.shape = {hp_inputs.shape}")
 
     # save infos of info file about separated (only 2!) inputs
     # save_config_of_separate_inputs(domain.info, path=paths.datasets_boxes_prep_path)
 
-    return domain, single_hps
+    return hp_inputs
 
 # test
 def get_name_from_index(index: int, info):
@@ -72,44 +63,75 @@ def get_name_from_index(index: int, info):
                 return property
 
 
+def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:List[HeatPump], domain:Domain):
+    hp: HeatPump
+    hp_inputs = []
+
+    for hp in single_hps:
+        hp.primary_temp_field = hp.apply_nn(model_1HP)
+        hp.primary_temp_field = domain.reverse_norm(hp.primary_temp_field, property="Temperature [C]")
+
+    for hp in single_hps:
+        hp.get_other_temp_field(single_hps)
+
+    for hp in single_hps:
+        hp.primary_temp_field = domain.norm(hp.primary_temp_field, property="Temperature [C]")
+        hp.other_temp_field = domain.norm(hp.other_temp_field, property="Temperature [C]")
+        inputs = stack([hp.primary_temp_field, hp.other_temp_field])
+
+        # hp.save(run_id=0, dir=paths.datasets_boxes_prep_path, inputs_all=inputs,)
+        print(f"prepare_hp_boxes:  inputs.shape = {inputs.shape}")
+        hp_inputs.append(inputs)
+    return stack(hp_inputs)
+
+
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
 def prep2_test(paths, file_name):
 
     # __init__
 
     info_path = paths.dataset_1st_prep_path
+    print(f"Info Datei:  {info_path}/info.yaml")
     info = load_yaml(info_path, "info")
-    size: tuple[int, int] = [info["CellsNumber"][0], info["CellsNumber"][1],]  # (x, y), cell-ids
-    background_temperature: float = 10.6
+    # size: tuple[int, int] = [info["CellsNumber"][0], info["CellsNumber"][1],]  # (x, y), cell-ids
+    # background_temperature: float = 10.6
 
     file_path = os.path.join(info_path, "Inputs", file_name)
     inputs = load(file_path)
     file_path = os.path.join(info_path, "Labels", file_name)
     label = load(file_path)
 
-    prediction: torch.tensor = (torch.ones(size) * background_temperature).to("cpu")
-    stitching: Stitching = Stitching("max", background_temperature)
-    normed_label: bool = True
+    # prediction: torch.tensor = (torch.ones(size) * background_temperature).to("cpu")
+    # stitching: Stitching = Stitching("max", background_temperature)
+    # normed_label: bool = True
     file_name: str = file_name
 
-    field_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
-    p_related_field = inputs[field_idx, :, :]
+    # field_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
+    # p_related_field = inputs[field_idx, :, :]
 
     # extract_hp_boxes
 
     field_idx = info["Inputs"]["Material ID"]["index"]
+    pos_hps = [torch.tensor([100,50]), torch.tensor([150,55])]  # [TEST] Manuelles Setzen
+    inputs[field_idx, :, :] = torch.zeros([512, 250])  # [TEST] Manuelles Setzen
+    inputs[field_idx, :, :][pos_hps[0][0], pos_hps[0][1]] = 1  # [TEST] Manuelles Setzen
+    inputs[field_idx, :, :][pos_hps[1][0], pos_hps[1][1]] = 1  # [TEST] Manuelles Setzen
     material_ids = inputs[field_idx, :, :]
+    print(f"Material-ID shape:  {material_ids.shape}")
+    
 
     size_hp_box = torch.tensor([info["CellsNumberPrior"][0],info["CellsNumberPrior"][1],])
     distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
     hp_boxes = []
-    pos_hps = torch.stack(list(torch.where(material_ids == torch.max(material_ids))), dim=0).T
-    print(f"pos hp: f{pos_hps}")
+    pos_hps = torch.stack(pos_hps) # torch.stack(list(torch.where(material_ids == torch.max(material_ids))), dim=0).T
     names_inputs = [get_name_from_index(i, info) for i in range(inputs.shape[0])] #TODO: was ist das?
+
 
     for idx in range(len(pos_hps)):
         try:
             pos_hp = pos_hps[idx]
+            print(f"HP Position:  i={idx},  pos_hp={pos_hp}")
+            print(material_ids[pos_hp[0], pos_hp[1]])
 
             corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:], run_name=file_name,)
             

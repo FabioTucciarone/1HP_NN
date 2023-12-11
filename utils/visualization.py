@@ -84,7 +84,7 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     return display_data
 
 
-def visualizations_demonstrator(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
+def visualizations_demonstrator(model: UNet, hp_inputs, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
 
     # if amount_datapoints_to_visu > len(dataloader.dataset):
     #     amount_datapoints_to_visu = len(dataloader.dataset)
@@ -95,40 +95,38 @@ def visualizations_demonstrator(model: UNet, dataloader: DataLoader, device: str
     settings_pic = {"format": pic_format}
 
     current_id = 0
-    # for inputs, labels in dataloader:
-        # len_batch = inputs.shape[0]
-    len_batch = 1 # inputss.shape[0] != 1?
+    
 
-    for inputs, labels in dataloader:
-        len_batch = inputs.shape[0]
-        for datapoint_id in range(1):
-            settings_pic["name"] = f"{plot_path}_{current_id}"
+    print(f"visualization:  inputs.shape = {hp_inputs.shape}")
+    # print(f"inputs = {inputs}")
+    len_batch = hp_inputs.shape[0]
+    print(f"visualization:  inputs.shape[0] = len_batch = {len_batch}") # 2
+    fig, axes = plt.subplots(2, 1)
+    for datapoint_id in range(len_batch):
+        settings_pic["name"] = f"{plot_path}_{current_id}"
 
-            x = torch.unsqueeze(inputs[datapoint_id].to(device), 0)
-            #y = labels[datapoint_id]
-            y_out = model(x).to(device)
+        x = torch.unsqueeze(hp_inputs[datapoint_id].to(device), 0)
+        #y = labels[datapoint_id]
+        y_out = model(x).to(device)
 
-            x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
-            y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
+        x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
+        y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
 
-            dict_to_plot = prepare_data_to_plot(x, y_out, y_out, info)
+        dict_to_plot = prepare_data_to_plot(x, y_out, y_out, info)
 
-            fig, axes = plt.subplots(1, 1)
-            
-            plt.title("OUT")
+        plt.sca(axes[datapoint_id])
+        plt.title("OUT")
 
-            plt.imshow(dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
-            plt.gca().invert_yaxis()
+        plt.imshow(dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
+        plt.gca().invert_yaxis()
 
-            plt.ylabel("x [m]")
-            _aligned_colorbar()
+        plt.ylabel("x [m]")
+        _aligned_colorbar()
 
-            plt.xlabel("y [m]")
-            plt.tight_layout()
+        plt.xlabel("y [m]")
+        plt.tight_layout()
 
-            plt.show() # TODO [BAFO]: Bessere Unterteilung!
-            # plot_isolines(dict_to_plot, settings_pic)
-            # measure_len_width_1K_isoline(dict_to_plot)
+    plt.show()
 
 
 def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
@@ -156,7 +154,6 @@ def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_data
             dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
 
             plot_datafields(dict_to_plot, settings_pic)
-            plt.show() # TODO [BAFO]: Bessere Unterteilung!
             plot_isolines(dict_to_plot, settings_pic)
             # measure_len_width_1K_isoline(dict_to_plot)
 
