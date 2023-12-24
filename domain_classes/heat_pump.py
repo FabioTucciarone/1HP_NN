@@ -24,7 +24,8 @@ class HeatPump:
         self.primary_temp_field: tensor = (None)  #temperature field, calculated by 1HP-NN
         self.other_temp_field: tensor = (ones(self.inputs[0].shape) * 10.6).to(device)  # input for 2HP-NN
         self.output: tensor = (None)  # temperature field
-        self.label = label.to(device)
+        if label is not None:
+            self.label = label.to(device)
         assert (self.pos[0] >= 0 and self.pos[1] >= 0), f"Heat pump position at {self.pos} is outside of domain"
 
     def recalc_sdf(self, info):

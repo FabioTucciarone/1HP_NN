@@ -22,6 +22,8 @@ from domain_classes.utils_2hp import save_config_of_separate_inputs, save_config
 from domain_classes.stitching import Stitching
 from utils.prepare_paths import Paths2HP
 
+import numpy as np
+
 
 def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groundtruth_info, device: str = "cuda:0"):
     """
@@ -46,8 +48,10 @@ def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groun
     single_hps, inputs, label = prep2_test(paths, run_file)
     # single_hps = domain.extract_hp_boxes(device=device)
 
+    info_path = paths.dataset_1st_prep_path
+    info = load_yaml(info_path, "info")
     # run_id = f'{run_file.split(".")[0]}_'
-    hp_inputs = prepare_hp_boxes_demonstrator(paths, model_1HP, single_hps, domain) # apply learned NN to predict the heat plumes
+    hp_inputs = prepare_hp_boxes_demonstrator(paths, model_1HP, single_hps, info) # apply learned NN to predict the heat plumes
     print(f"prepare:  inputs.shape = {inputs.shape}")
     print(f"prepare:  hp_inputs.shape = {hp_inputs.shape}")
 
@@ -63,20 +67,60 @@ def get_name_from_index(index: int, info):
                 return property
 
 
-def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:List[HeatPump], domain:Domain):
+def reverse_temperature_norm(data, info):
+    norm_fct = info["Labels"]["Temperature [C]"]["norm"]
+    max_val = info["Labels"]["Temperature [C]"]["max"]
+    min_val = info["Labels"]["Temperature [C]"]["min"]
+    mean_val = info["Labels"]["Temperature [C]"]["mean"]
+    std_val = info["Labels"]["Temperature [C]"]["std"]
+    if norm_fct == "Rescale":
+        out_min, out_max = (
+            0,
+            1,
+        )  # TODO Achtung! Hardcoded, values same as in transforms.NormalizeTransform.out_min/max
+        delta = max_val - min_val
+        data = (data - out_min) / (out_max - out_min) * delta + min_val
+    elif norm_fct == "Standardize":
+        data = data * std_val + mean_val
+    elif norm_fct is None:
+        pass
+    else:
+        raise ValueError(f"Normalization type not recognized")
+    return data
+
+def norm_temperature(data, info):
+    norm_fct = info["Labels"]["Temperature [C]"]["norm"]
+    max_val = info["Labels"]["Temperature [C]"]["max"]
+    min_val = info["Labels"]["Temperature [C]"]["min"]
+    mean_val = info["Labels"]["Temperature [C]"]["mean"]
+    std_val = info["Labels"]["Temperature [C]"]["std"]
+
+    if norm_fct == "Rescale":
+        out_min, out_max = (0, 1)  # TODO Achtung! Hardcoded, values same as in transforms.NormalizeTransform.out_min/max
+        delta = max_val - min_val
+        data = (data - min_val) / delta * (out_max - out_min) + out_min
+    elif norm_fct == "Standardize":
+        data = (data - mean_val) / std_val
+    elif norm_fct is None:
+        pass
+    else:
+        raise ValueError(f"Normalization type not recognized")
+    return data
+
+def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:List[HeatPump], info):
     hp: HeatPump
     hp_inputs = []
 
     for hp in single_hps:
         hp.primary_temp_field = hp.apply_nn(model_1HP)
-        hp.primary_temp_field = domain.reverse_norm(hp.primary_temp_field, property="Temperature [C]")
+        hp.primary_temp_field = reverse_temperature_norm(hp.primary_temp_field, info)
 
     for hp in single_hps:
         hp.get_other_temp_field(single_hps)
 
     for hp in single_hps:
-        hp.primary_temp_field = domain.norm(hp.primary_temp_field, property="Temperature [C]")
-        hp.other_temp_field = domain.norm(hp.other_temp_field, property="Temperature [C]")
+        hp.primary_temp_field = norm_temperature(hp.primary_temp_field, info)
+        hp.other_temp_field = norm_temperature(hp.other_temp_field, info)
         inputs = stack([hp.primary_temp_field, hp.other_temp_field])
 
         # hp.save(run_id=0, dir=paths.datasets_boxes_prep_path, inputs_all=inputs,)
@@ -88,39 +132,34 @@ def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:Lis
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
 def prep2_test(paths, file_name):
 
+    pos_hps = [torch.tensor([100,50]), torch.tensor([150,45])]  # [MANUELL] Position
+    pressure = -2.142171334025262316e-03
+    permeability = 7.350276541753949086e-10
+
     # __init__
 
     info_path = paths.dataset_1st_prep_path
-    print(f"Info Datei:  {info_path}/info.yaml")
     info = load_yaml(info_path, "info")
-    # size: tuple[int, int] = [info["CellsNumber"][0], info["CellsNumber"][1],]  # (x, y), cell-ids
-    # background_temperature: float = 10.6
 
-    file_path = os.path.join(info_path, "Inputs", file_name)
-    inputs = load(file_path)
-    file_path = os.path.join(info_path, "Labels", file_name)
-    label = load(file_path)
 
-    # prediction: torch.tensor = (torch.ones(size) * background_temperature).to("cpu")
-    # stitching: Stitching = Stitching("max", background_temperature)
-    # normed_label: bool = True
-    file_name: str = file_name
+    field_size = (512, 250)
+    inputs = torch.empty(size=(4, field_size[0], field_size[1]))
 
-    # field_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
-    # p_related_field = inputs[field_idx, :, :]
+    gradient_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
+    inputs[gradient_idx] = torch.ones(field_size).float() * pressure # [512, 250] einlesen
 
-    # extract_hp_boxes
+    permeability_idx = info["Inputs"]["Permeability X [m^2]"]["index"]
+    inputs[permeability_idx] = torch.tensor(np.full(field_size, permeability, order='F')).float() # [512, 250] einlesen
 
-    field_idx = info["Inputs"]["Material ID"]["index"]
-    pos_hps = [torch.tensor([100,50]), torch.tensor([150,55])]  # [TEST] Manuelles Setzen
-    inputs[field_idx, :, :] = torch.zeros([512, 250])  # [TEST] Manuelles Setzen
-    inputs[field_idx, :, :][pos_hps[0][0], pos_hps[0][1]] = 1  # [TEST] Manuelles Setzen
-    inputs[field_idx, :, :][pos_hps[1][0], pos_hps[1][1]] = 1  # [TEST] Manuelles Setzen
-    material_ids = inputs[field_idx, :, :]
-    print(f"Material-ID shape:  {material_ids.shape}")
-    
+    material_id_idx = info["Inputs"]["Material ID"]["index"]
+    inputs[material_id_idx] = torch.zeros(field_size)  # [TEST] Manuelles Setzen
+    inputs[material_id_idx][pos_hps[0][0], pos_hps[0][1]] = 1  # [TEST] Manuelles Setzen
+    inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 1  # [TEST] Manuelles Setzen
+    material_ids = inputs[material_id_idx]
+
 
     size_hp_box = torch.tensor([info["CellsNumberPrior"][0],info["CellsNumberPrior"][1],])
+    print(f"size_hp_box = {size_hp_box}")
     distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
     hp_boxes = []
     pos_hps = torch.stack(pos_hps) # torch.stack(list(torch.where(material_ids == torch.max(material_ids))), dim=0).T
@@ -136,7 +175,6 @@ def prep2_test(paths, file_name):
             corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:], run_name=file_name,)
             
             tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
-            tmp_label = label[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
 
 
             tmp_mat_ids = torch.stack(list(torch.where(tmp_input == torch.max(material_ids))), dim=0).T
@@ -146,7 +184,7 @@ def prep2_test(paths, file_name):
                     if (tmp_pos[1:2] != distance_hp_corner).all():
                         tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
 
-            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=names_inputs, dist_corner_hp=distance_hp_corner, label=tmp_label, device="cpu",)
+            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=names_inputs, dist_corner_hp=distance_hp_corner, label=None, device="cpu",)
   
             if "SDF" in info["Inputs"]:
                 tmp_hp.recalc_sdf(info)
@@ -156,7 +194,7 @@ def prep2_test(paths, file_name):
         except:
             logging.warning(f"BOX of HP {idx} at {pos_hp} is not in domain")
                 
-    return hp_boxes, inputs, label
+    return hp_boxes, inputs, None
 
 
 def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str = "cuda:0"):
