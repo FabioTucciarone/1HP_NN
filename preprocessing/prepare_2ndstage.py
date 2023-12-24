@@ -25,7 +25,7 @@ from utils.prepare_paths import Paths2HP
 import numpy as np
 
 
-def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groundtruth_info, device: str = "cuda:0"):
+def prepare_demonstrator_input_2hp(paths: Paths2HP, inputs_1hp: str, pressure, permeability, positions, device: str = "cuda:0"):
     """
     assumptions:
     - 1hp-boxes are generated already
@@ -37,26 +37,11 @@ def prepare_demonstrator_input_2nd_stage(paths: Paths2HP, inputs_1hp: str, groun
 
     model_1HP = UNet(in_channels=len(inputs_1hp)).float()
     model_1HP.load(paths.model_1hp_path, device)
-    
-    #prepare_dataset(paths, inputs_1hp, info=info, power2trafo=False) #TODO: Muss vorbereitet vorliegen!!!!!
 
-    run_file = "RUN_0.pt"
-    domain = Domain(paths.dataset_1st_prep_path, stitching_method="max", file_name=run_file) # Domäne von Punkt 0
-    print(f"prepare:  Domäne von {run_file} aus {paths.dataset_1st_prep_path}")
-    # if domain.skip_datapoint: logging.warning(f"Skipping {0}") # Pressure Gradient [-] oder Permeability X [m^2] nicht in [0,1]
+    info = load_yaml(paths.dataset_1st_prep_path, "info")
 
-    single_hps, inputs, label = prep2_test(paths, run_file)
-    # single_hps = domain.extract_hp_boxes(device=device)
-
-    info_path = paths.dataset_1st_prep_path
-    info = load_yaml(info_path, "info")
-    # run_id = f'{run_file.split(".")[0]}_'
-    hp_inputs = prepare_hp_boxes_demonstrator(paths, model_1HP, single_hps, info) # apply learned NN to predict the heat plumes
-    print(f"prepare:  inputs.shape = {inputs.shape}")
-    print(f"prepare:  hp_inputs.shape = {hp_inputs.shape}")
-
-    # save infos of info file about separated (only 2!) inputs
-    # save_config_of_separate_inputs(domain.info, path=paths.datasets_boxes_prep_path)
+    single_hps = build_input_tensor(info, pressure, permeability, positions)
+    hp_inputs = prepare_hp_boxes_demonstrator(paths, model_1HP, single_hps, info)
 
     return hp_inputs
 
@@ -130,17 +115,9 @@ def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:Lis
 
 
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
-def prep2_test(paths, file_name):
+def build_input_tensor(info, pressure, permeability, positions):
 
-    pos_hps = [torch.tensor([100,50]), torch.tensor([150,45])]  # [MANUELL] Position
-    pressure = -2.142171334025262316e-03
-    permeability = 7.350276541753949086e-10
-
-    # __init__
-
-    info_path = paths.dataset_1st_prep_path
-    info = load_yaml(info_path, "info")
-
+    pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
 
     field_size = (512, 250)
     inputs = torch.empty(size=(4, field_size[0], field_size[1]))
@@ -152,14 +129,13 @@ def prep2_test(paths, file_name):
     inputs[permeability_idx] = torch.tensor(np.full(field_size, permeability, order='F')).float() # [512, 250] einlesen
 
     material_id_idx = info["Inputs"]["Material ID"]["index"]
-    inputs[material_id_idx] = torch.zeros(field_size)  # [TEST] Manuelles Setzen
-    inputs[material_id_idx][pos_hps[0][0], pos_hps[0][1]] = 1  # [TEST] Manuelles Setzen
-    inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 1  # [TEST] Manuelles Setzen
+    inputs[material_id_idx] = torch.zeros(field_size)
+    inputs[material_id_idx][pos_hps[0][0], pos_hps[0][1]] = 1
+    inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 1
     material_ids = inputs[material_id_idx]
 
 
     size_hp_box = torch.tensor([info["CellsNumberPrior"][0],info["CellsNumberPrior"][1],])
-    print(f"size_hp_box = {size_hp_box}")
     distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
     hp_boxes = []
     pos_hps = torch.stack(pos_hps) # torch.stack(list(torch.where(material_ids == torch.max(material_ids))), dim=0).T
@@ -172,7 +148,7 @@ def prep2_test(paths, file_name):
             print(f"HP Position:  i={idx},  pos_hp={pos_hp}")
             print(material_ids[pos_hp[0], pos_hp[1]])
 
-            corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:], run_name=file_name,)
+            corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:])
             
             tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
 
@@ -194,7 +170,7 @@ def prep2_test(paths, file_name):
         except:
             logging.warning(f"BOX of HP {idx} at {pos_hp} is not in domain")
                 
-    return hp_boxes, inputs, None
+    return hp_boxes
 
 
 def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str = "cuda:0"):

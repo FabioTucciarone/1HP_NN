@@ -96,11 +96,8 @@ def visualizations_demonstrator(model: UNet, hp_inputs, dataloader: DataLoader, 
 
     current_id = 0
     
-
-    print(f"visualization:  inputs.shape = {hp_inputs.shape}")
-    # print(f"inputs = {inputs}")
     len_batch = hp_inputs.shape[0]
-    print(f"visualization:  inputs.shape[0] = len_batch = {len_batch}") # 2
+
     fig, axes = plt.subplots(2, 1)
     for datapoint_id in range(len_batch):
         settings_pic["name"] = f"{plot_path}_{current_id}"
