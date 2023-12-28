@@ -25,7 +25,7 @@ from utils.prepare_paths import Paths2HP
 import numpy as np
 
 
-def prepare_demonstrator_input_2hp(paths: Paths2HP, inputs_1hp: str, pressure, permeability, positions, device: str = "cuda:0"):
+def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, positions):
     """
     assumptions:
     - 1hp-boxes are generated already
@@ -35,15 +35,10 @@ def prepare_demonstrator_input_2hp(paths: Paths2HP, inputs_1hp: str, pressure, p
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
 
-    model_1HP = UNet(in_channels=len(inputs_1hp)).float()
-    model_1HP.load(paths.model_1hp_path, device)
+    single_hps, ll = build_input_tensor(info, pressure, permeability, positions)
+    hp_inputs = prepare_hp_boxes_demonstrator(info, model_1HP, single_hps)
 
-    info = load_yaml(paths.dataset_1st_prep_path, "info")
-
-    single_hps = build_input_tensor(info, pressure, permeability, positions)
-    hp_inputs = prepare_hp_boxes_demonstrator(paths, model_1HP, single_hps, info)
-
-    return hp_inputs
+    return hp_inputs, ll
 
 # test
 def get_name_from_index(index: int, info):
@@ -92,7 +87,7 @@ def norm_temperature(data, info):
         raise ValueError(f"Normalization type not recognized")
     return data
 
-def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:List[HeatPump], info):
+def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPump]):
     hp: HeatPump
     hp_inputs = []
 
@@ -108,8 +103,6 @@ def prepare_hp_boxes_demonstrator(paths:Paths2HP, model_1HP:UNet, single_hps:Lis
         hp.other_temp_field = norm_temperature(hp.other_temp_field, info)
         inputs = stack([hp.primary_temp_field, hp.other_temp_field])
 
-        # hp.save(run_id=0, dir=paths.datasets_boxes_prep_path, inputs_all=inputs,)
-        print(f"prepare_hp_boxes:  inputs.shape = {inputs.shape}")
         hp_inputs.append(inputs)
     return stack(hp_inputs)
 
@@ -119,14 +112,14 @@ def build_input_tensor(info, pressure, permeability, positions):
 
     pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
 
-    field_size = (512, 250)
+    field_size = info["CellsNumber"]
     inputs = torch.empty(size=(4, field_size[0], field_size[1]))
 
     gradient_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
-    inputs[gradient_idx] = torch.ones(field_size).float() * pressure # [512, 250] einlesen
+    inputs[gradient_idx] = torch.ones(field_size).float() * pressure
 
     permeability_idx = info["Inputs"]["Permeability X [m^2]"]["index"]
-    inputs[permeability_idx] = torch.tensor(np.full(field_size, permeability, order='F')).float() # [512, 250] einlesen
+    inputs[permeability_idx] = torch.tensor(np.full(field_size, permeability, order='F')).float()
 
     material_id_idx = info["Inputs"]["Material ID"]["index"]
     inputs[material_id_idx] = torch.zeros(field_size)
@@ -134,22 +127,22 @@ def build_input_tensor(info, pressure, permeability, positions):
     inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 1
     material_ids = inputs[material_id_idx]
 
-
     size_hp_box = torch.tensor([info["CellsNumberPrior"][0],info["CellsNumberPrior"][1],])
     distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
-    hp_boxes = []
-    pos_hps = torch.stack(pos_hps) # torch.stack(list(torch.where(material_ids == torch.max(material_ids))), dim=0).T
-    names_inputs = [get_name_from_index(i, info) for i in range(inputs.shape[0])] #TODO: was ist das?
+    pos_hps = torch.stack(pos_hps)
 
+    names_inputs = [get_name_from_index(i, info) for i in range(inputs.shape[0])]
+
+    hp_boxes = []
+    corners_ll = []
 
     for idx in range(len(pos_hps)):
         try:
             pos_hp = pos_hps[idx]
-            print(f"HP Position:  i={idx},  pos_hp={pos_hp}")
-            print(material_ids[pos_hp[0], pos_hp[1]])
 
             corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:])
-            
+            corners_ll.append(corner_ll)
+
             tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
 
 
@@ -166,11 +159,10 @@ def build_input_tensor(info, pressure, permeability, positions):
                 tmp_hp.recalc_sdf(info)
 
             hp_boxes.append(tmp_hp)
-            logging.info(f"HP BOX at {pos_hp} is with ({corner_ll}, {corner_ur}) in domain")
         except:
             logging.warning(f"BOX of HP {idx} at {pos_hp} is not in domain")
                 
-    return hp_boxes
+    return hp_boxes, corners_ll
 
 
 def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str = "cuda:0"):
