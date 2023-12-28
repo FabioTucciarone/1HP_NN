@@ -35,18 +35,12 @@ def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, posi
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
 
-    single_hps, ll = build_input_tensor(info, pressure, permeability, positions)
+    single_hps, corner_ll = build_inputs(info, pressure, permeability, positions)
     hp_inputs = prepare_hp_boxes_demonstrator(info, model_1HP, single_hps)
 
-    return hp_inputs, ll
+    return hp_inputs, corner_ll
 
-# test
-def get_name_from_index(index: int, info):
-        for property, values in info["Inputs"].items():
-            if values["index"] == index:
-                return property
-
-
+# Kopie, da sonst nur über Objekt Zugriff. Siehe domain.py
 def reverse_temperature_norm(data, info):
     norm_fct = info["Labels"]["Temperature [C]"]["norm"]
     max_val = info["Labels"]["Temperature [C]"]["max"]
@@ -68,6 +62,7 @@ def reverse_temperature_norm(data, info):
         raise ValueError(f"Normalization type not recognized")
     return data
 
+# Kopie, da sonst nur über Objekt Zugriff. Siehe domain.py
 def norm_temperature(data, info):
     norm_fct = info["Labels"]["Temperature [C]"]["norm"]
     max_val = info["Labels"]["Temperature [C]"]["max"]
@@ -108,7 +103,7 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
 
 
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
-def build_input_tensor(info, pressure, permeability, positions):
+def build_inputs(info, pressure, permeability, positions):
 
     pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
 
@@ -131,8 +126,6 @@ def build_input_tensor(info, pressure, permeability, positions):
     distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
     pos_hps = torch.stack(pos_hps)
 
-    names_inputs = [get_name_from_index(i, info) for i in range(inputs.shape[0])]
-
     hp_boxes = []
     corners_ll = []
 
@@ -145,7 +138,6 @@ def build_input_tensor(info, pressure, permeability, positions):
 
             tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
 
-
             tmp_mat_ids = torch.stack(list(torch.where(tmp_input == torch.max(material_ids))), dim=0).T
             if len(tmp_mat_ids) > 1:
                 for i in range(len(tmp_mat_ids)):
@@ -153,7 +145,7 @@ def build_input_tensor(info, pressure, permeability, positions):
                     if (tmp_pos[1:2] != distance_hp_corner).all():
                         tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
 
-            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=names_inputs, dist_corner_hp=distance_hp_corner, label=None, device="cpu",)
+            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device="cpu",)
   
             if "SDF" in info["Inputs"]:
                 tmp_hp.recalc_sdf(info)

@@ -84,11 +84,7 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     return display_data
 
 
-def get_2hp_plots(model: UNet, hp_inputs, corners_ll, corner_dist, dataloader: DataLoader, color_palette, device: str = "cpu"):
-
-
-    norm = dataloader.dataset.dataset.norm
-    info = dataloader.dataset.dataset.info
+def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
 
     size_hp_box = info["CellsNumberPrior"]
     field_shape = info["CellsNumber"]
@@ -96,21 +92,16 @@ def get_2hp_plots(model: UNet, hp_inputs, corners_ll, corner_dist, dataloader: D
     image_shape[1] = min(image_shape[1], 100)
 
     model.eval()
-    
     len_batch = hp_inputs.shape[0]
-
     out_image = torch.full((image_shape[0], image_shape[1]), 10.6)
-    print(f"image_shape = {image_shape}")
 
-    # fig, axes = plt.subplots(2, 1)
     for i in range(len_batch):
 
         x = torch.unsqueeze(hp_inputs[i].to(device), 0)
-        y_out = model(x).to(device)
+        y_out = torch.squeeze(model(x).to(device), 0)
 
-        x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
-        y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
-
+        import preprocessing.prepare_2ndstage as prep
+        y_out = prep.reverse_temperature_norm(y_out.detach().cpu()[0], info)
         ll_x = corners_ll[i][0] - corner_dist[1]
         ll_y = corners_ll[i][1] - corner_dist[0]
         ur_x = ll_x + size_hp_box[0]
@@ -120,16 +111,12 @@ def get_2hp_plots(model: UNet, hp_inputs, corners_ll, corner_dist, dataloader: D
         clip_ur_x = min(ur_x, image_shape[0])
         clip_ur_y = min(ur_y, image_shape[1])
 
-        start_time = time.perf_counter()
         out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = torch.maximum(
             y_out[clip_ll_x - ll_x : y_out.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y_out.shape[1]- ur_y + clip_ur_y], 
             out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y]
         )
-        end_time = time.perf_counter()
-        print(end_time - start_time)
 
-    # plt.show()
-    extent_heights = out_image.shape * np.array(info["CellsSize"][:2])
+    extent_heights = out_image.shape * np.array(info["CellsSize"][:2]) # TODO: Einbinden
 
     display_data = mc.DisplayData(color_palette)
     display_data.set_figure("result", out_image.T, cmap="RdBu_r")

@@ -51,15 +51,12 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     The input preperation is based on the gksi-input with a fixed position.
     """
 
-    info = info.copy() # TODO: Nötig wegen gleichzeitigen Zugriffen?
     check_for_dataset(paths.raw_path)
 
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
     pflotran_settings = get_pflotran_settings(paths.raw_path)
 
     dims = np.array(pflotran_settings["grid"]["ncells"])
-    total_size = np.array(pflotran_settings["grid"]["size"])
-    cell_size = total_size/dims
 
     tensor_transform = ToTensorTransform()
 
@@ -79,20 +76,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     x = tensor_transform(x)
     y = transforms(y, loc_hp=loc_hp)
     y = tensor_transform(y)
-  
-    assert 1 in y.shape, "y is not expected to have several output parameters"
-    assert len(y.shape) == 3, "y is expected to be 2D"
-
-    info["CellsNumberPrior"] = info["CellsNumber"]
-    info["PositionHPPrior"] = info["PositionLastHP"]
-    assert info["CellsSize"][:2] == cell_size.tolist()[:2], f"Cell size changed between given info.yaml {info['CellsSize']} and data {cell_size.tolist()}"        
-    info["CellsSize"] = cell_size.tolist()
-    # change of size possible; order of tensor is in any case the other way around
-    assert 1 in y.shape, "y is not expected to have several output parameters"
-    assert len(y.shape) == 3, "y is expected to be 2D"
-    dims = list(y.shape)[1:]
-    info["CellsNumber"] = dims
-    info["PositionLastHP"] = loc_hp.tolist()
 
     # begin normalize()
 
