@@ -25,7 +25,7 @@ from utils.prepare_paths import Paths2HP
 import numpy as np
 
 
-def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, positions):
+def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, positions, device="cpu"):
     """
     assumptions:
     - 1hp-boxes are generated already
@@ -35,8 +35,15 @@ def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, posi
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
 
-    single_hps, corner_ll = build_inputs(info, pressure, permeability, positions)
+    build_inputs_s_time = time.perf_counter()
+    single_hps, corner_ll = build_inputs(info, pressure, permeability, positions, device=device)
+    build_inputs_e_time = time.perf_counter()
+    print(f"Zeit :: build_inputs() :: {build_inputs_e_time - build_inputs_s_time}s")
+
+    prepare_hp_boxes_demonstrator_s_time = time.perf_counter()
     hp_inputs = prepare_hp_boxes_demonstrator(info, model_1HP, single_hps)
+    prepare_hp_boxes_demonstrator_e_time = time.perf_counter()
+    print(f"Zeit :: prepare_hp_boxes_demonstrator() :: {prepare_hp_boxes_demonstrator_e_time - prepare_hp_boxes_demonstrator_s_time}s")
 
     return hp_inputs, corner_ll
 
@@ -86,24 +93,33 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
     hp: HeatPump
     hp_inputs = []
 
+    a = time.perf_counter()
     for hp in single_hps:
         hp.primary_temp_field = hp.apply_nn(model_1HP)
         hp.primary_temp_field = reverse_temperature_norm(hp.primary_temp_field, info)
+    b = time.perf_counter()
+    print(f"{b-a}s")
 
+    a = time.perf_counter()
     for hp in single_hps:
         hp.get_other_temp_field(single_hps)
+    b = time.perf_counter()
+    print(f"{b-a}s")
 
+    a = time.perf_counter()
     for hp in single_hps:
         hp.primary_temp_field = norm_temperature(hp.primary_temp_field, info)
         hp.other_temp_field = norm_temperature(hp.other_temp_field, info)
         inputs = stack([hp.primary_temp_field, hp.other_temp_field])
 
         hp_inputs.append(inputs)
+    b = time.perf_counter()
+    print(f"{b-a}s")
     return stack(hp_inputs)
 
 
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
-def build_inputs(info, pressure, permeability, positions):
+def build_inputs(info, pressure, permeability, positions, device="cpu"):
 
     pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
 
@@ -145,7 +161,7 @@ def build_inputs(info, pressure, permeability, positions):
                     if (tmp_pos[1:2] != distance_hp_corner).all():
                         tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
 
-            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device="cpu",)
+            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device=device,)
   
             if "SDF" in info["Inputs"]:
                 tmp_hp.recalc_sdf(info)

@@ -86,6 +86,8 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
 
 def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
 
+    get_2hp_plots_s_time = time.perf_counter()
+
     size_hp_box = info["CellsNumberPrior"]
     field_shape = info["CellsNumber"]
     image_shape = [field_shape[0] - size_hp_box[0] - 1, field_shape[1] - size_hp_box[1] - 1]
@@ -120,6 +122,10 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
 
     display_data = mc.DisplayData(color_palette)
     display_data.set_figure("result", out_image.T, cmap="RdBu_r")
+
+    get_2hp_plots_e_time = time.perf_counter()
+    print(f"Zeit :: get_2hp_plots() :: {get_2hp_plots_e_time - get_2hp_plots_s_time}s")
+    
     return display_data
 
 
