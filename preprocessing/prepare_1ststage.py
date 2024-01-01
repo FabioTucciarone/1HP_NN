@@ -79,8 +79,8 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
 
     norm = NormalizeTransform(info)
 
-    x = norm(x,"Inputs")
-    y = norm(y,"Labels")
+    x = norm(x,"Inputs") # .to("cuda:0") TODO: device!!!!!
+    y = norm(y,"Labels") # .to("cuda:0")
 
     # end normalize()
 

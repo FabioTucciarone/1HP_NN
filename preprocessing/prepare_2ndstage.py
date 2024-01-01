@@ -25,7 +25,7 @@ from utils.prepare_paths import Paths2HP
 import numpy as np
 
 
-def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, positions, device="cpu"):
+def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, positions, device):
     """
     assumptions:
     - 1hp-boxes are generated already
@@ -35,15 +35,15 @@ def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, posi
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
 
-    build_inputs_s_time = time.perf_counter()
-    single_hps, corner_ll = build_inputs(info, pressure, permeability, positions, device=device)
-    build_inputs_e_time = time.perf_counter()
-    print(f"Zeit :: build_inputs() :: {build_inputs_e_time - build_inputs_s_time}s")
+    a = time.perf_counter()
+    single_hps, corner_ll = build_inputs(info, pressure, permeability, positions, device)
+    b = time.perf_counter()
+    print(f"Zeit :: build_inputs() :: {b - a}s")
 
-    prepare_hp_boxes_demonstrator_s_time = time.perf_counter()
+    a = time.perf_counter()
     hp_inputs = prepare_hp_boxes_demonstrator(info, model_1HP, single_hps)
-    prepare_hp_boxes_demonstrator_e_time = time.perf_counter()
-    print(f"Zeit :: prepare_hp_boxes_demonstrator() :: {prepare_hp_boxes_demonstrator_e_time - prepare_hp_boxes_demonstrator_s_time}s")
+    b = time.perf_counter()
+    print(f"Zeit :: prepare_hp_boxes_demonstrator() :: {b - a}s")
 
     return hp_inputs, corner_ll
 
@@ -94,32 +94,27 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
     hp_inputs = []
 
     a = time.perf_counter()
-    for hp in single_hps:
+    for hp in single_hps:   
         hp.primary_temp_field = hp.apply_nn(model_1HP)
         hp.primary_temp_field = reverse_temperature_norm(hp.primary_temp_field, info)
     b = time.perf_counter()
-    print(f"{b-a}s")
+    print(f"Zeit :: prepare_hp_boxes_demonstrator() : 2 x hp.apply_nn(): {b-a}s")
 
-    a = time.perf_counter()
     for hp in single_hps:
         hp.get_other_temp_field(single_hps)
-    b = time.perf_counter()
-    print(f"{b-a}s")
 
-    a = time.perf_counter()
     for hp in single_hps:
         hp.primary_temp_field = norm_temperature(hp.primary_temp_field, info)
         hp.other_temp_field = norm_temperature(hp.other_temp_field, info)
         inputs = stack([hp.primary_temp_field, hp.other_temp_field])
 
         hp_inputs.append(inputs)
-    b = time.perf_counter()
-    print(f"{b-a}s")
+
     return stack(hp_inputs)
 
 
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
-def build_inputs(info, pressure, permeability, positions, device="cpu"):
+def build_inputs(info, pressure, permeability, positions, device):
 
     pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
 
@@ -146,30 +141,31 @@ def build_inputs(info, pressure, permeability, positions, device="cpu"):
     corners_ll = []
 
     for idx in range(len(pos_hps)):
-        try:
-            pos_hp = pos_hps[idx]
+        
+        pos_hp = pos_hps[idx]
 
-            corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:])
-            corners_ll.append(corner_ll)
+        corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:])
+        corners_ll.append(corner_ll)
 
-            tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
+        tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
+        tmp_mat_ids = torch.stack(list(torch.where(tmp_input == torch.max(material_ids))), dim=0).T
 
-            tmp_mat_ids = torch.stack(list(torch.where(tmp_input == torch.max(material_ids))), dim=0).T
-            if len(tmp_mat_ids) > 1:
-                for i in range(len(tmp_mat_ids)):
-                    tmp_pos = tmp_mat_ids[i]
-                    if (tmp_pos[1:2] != distance_hp_corner).all():
-                        tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
+        if len(tmp_mat_ids) > 1:
+            for i in range(len(tmp_mat_ids)):
+                tmp_pos = tmp_mat_ids[i]
+                if (tmp_pos[1:2] != distance_hp_corner).all():
+                    tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
+            
+        tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device=device,)
+            
+        if "SDF" in info["Inputs"]: # 0.00071s anstatt 0.088s mit tmp_hp.recalc_sdf(info)
+            index_sdf = info["Inputs"]["SDF"]["index"]
+            distances = torch.tensor(np.moveaxis(np.mgrid[:tmp_input[index_sdf].shape[0],:tmp_input[index_sdf].shape[1]], 0, -1)) - distance_hp_corner
+            distances = torch.linalg.vector_norm(distances.float(), dim=2)
+            tmp_hp.inputs[index_sdf] = 1 - distances / distances.max()
 
-            tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device=device,)
-  
-            if "SDF" in info["Inputs"]:
-                tmp_hp.recalc_sdf(info)
+        hp_boxes.append(tmp_hp)
 
-            hp_boxes.append(tmp_hp)
-        except:
-            logging.warning(f"BOX of HP {idx} at {pos_hp} is not in domain")
-                
     return hp_boxes, corners_ll
 
 

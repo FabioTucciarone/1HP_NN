@@ -91,8 +91,8 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
     size_hp_box = info["CellsNumberPrior"]
     field_shape = info["CellsNumber"]
     image_shape = [field_shape[0] - size_hp_box[0] - 1, field_shape[1] - size_hp_box[1] - 1]
-    image_shape[1] = min(image_shape[1], 100)
-
+    image_shape[1] = min(image_shape[1], 60)
+    
     model.eval()
     len_batch = hp_inputs.shape[0]
     out_image = torch.full((image_shape[0], image_shape[1]), 10.6)
@@ -103,7 +103,7 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
         y_out = torch.squeeze(model(x).to(device), 0)
 
         import preprocessing.prepare_2ndstage as prep
-        y_out = prep.reverse_temperature_norm(y_out.detach().cpu()[0], info)
+        y_out = prep.reverse_temperature_norm(y_out.detach()[0], info).cpu()
         ll_x = corners_ll[i][0] - corner_dist[1]
         ll_y = corners_ll[i][1] - corner_dist[0]
         ur_x = ll_x + size_hp_box[0]
@@ -113,10 +113,7 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
         clip_ur_x = min(ur_x, image_shape[0])
         clip_ur_y = min(ur_y, image_shape[1])
 
-        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = torch.maximum(
-            y_out[clip_ll_x - ll_x : y_out.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y_out.shape[1]- ur_y + clip_ur_y], 
-            out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y]
-        )
+        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = y_out[clip_ll_x - ll_x : y_out.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y_out.shape[1]- ur_y + clip_ur_y]
 
     extent_heights = out_image.shape * np.array(info["CellsSize"][:2]) # TODO: Einbinden
 
