@@ -45,13 +45,13 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
                 "duration of whole process in seconds": time_end}, file)
         
  
-def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_info: GroundTruthInfo, permeability: float, pressure: float , power2trafo: bool = True, info:dict = None):
+def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_info: GroundTruthInfo, permeability: float, pressure: float, info, device):
     """
     Generate a prepared dataset directly from the input parameters of the demonstrator app.
     The input preperation is based on the gksi-input with a fixed position.
     """
 
-    transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=power2trafo)
+    transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=True)
     pflotran_settings = get_pflotran_settings(paths.raw_path)
 
     dims = np.array(pflotran_settings["grid"]["ncells"])
@@ -71,7 +71,7 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     loc_hp = get_hp_location(x)
 
     x = transforms(x, loc_hp=loc_hp)
-    x = tensor_transform(x)
+    x = tensor_transform(x).to(device)
     y = transforms(y, loc_hp=loc_hp)
     y = tensor_transform(y)
 
@@ -79,8 +79,8 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
 
     norm = NormalizeTransform(info)
 
-    x = norm(x,"Inputs") # .to("cuda:0") TODO: device!!!!!
-    y = norm(y,"Labels") # .to("cuda:0")
+    x = norm(x, "Inputs")
+    y = norm(y, "Labels")
 
     # end normalize()
 
