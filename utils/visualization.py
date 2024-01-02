@@ -69,12 +69,11 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     y_out = model(x).to(device)
 
     # reverse transform for plotting real values
-    x = norm.reverse(x.detach().cpu().squeeze(), "Inputs")
-    y = norm.reverse(y.detach().cpu(),"Labels")[0]
-    y_out = norm.reverse(y_out.detach().cpu()[0],"Labels")[0]
+    x = norm.reverse(x.detach().squeeze(), "Inputs").cpu()
+    y = norm.reverse(y.detach(),"Labels")[0].cpu()
+    y_out = norm.reverse(y_out.detach()[0],"Labels")[0].cpu()
 
     dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
-
     display_data = mc.DisplayData(color_palette)
     display_data.set_figure("model_result", dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
     display_data.set_figure("groundtruth", dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
@@ -85,9 +84,8 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
 
 
 def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
-
-    get_2hp_plots_s_time = time.perf_counter()
-
+    # TODO: Hier noch langsam
+    # ACHTUNG: Feldhöhe ist fest auf max. 60 gesetzt!
     size_hp_box = info["CellsNumberPrior"]
     field_shape = info["CellsNumber"]
     image_shape = [field_shape[0] - size_hp_box[0] - 1, field_shape[1] - size_hp_box[1] - 1]
@@ -115,13 +113,10 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
 
         out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = y_out[clip_ll_x - ll_x : y_out.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y_out.shape[1]- ur_y + clip_ur_y]
 
-    extent_heights = out_image.shape * np.array(info["CellsSize"][:2]) # TODO: Einbinden
+    extent_highs = out_image.shape * np.array(info["CellsSize"][:2]) # TODO: Einbinden
 
     display_data = mc.DisplayData(color_palette)
-    display_data.set_figure("result", out_image.T, cmap="RdBu_r")
-
-    get_2hp_plots_e_time = time.perf_counter()
-    print(f"Zeit :: get_2hp_plots() :: {get_2hp_plots_e_time - get_2hp_plots_s_time}s")
+    display_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0,extent_highs[0],extent_highs[1],0))
     
     return display_data
 

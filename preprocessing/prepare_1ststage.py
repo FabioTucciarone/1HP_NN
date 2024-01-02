@@ -50,7 +50,6 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     Generate a prepared dataset directly from the input parameters of the demonstrator app.
     The input preperation is based on the gksi-input with a fixed position.
     """
-
     transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=True)
     pflotran_settings = get_pflotran_settings(paths.raw_path)
 
@@ -69,20 +68,14 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     y = gt.generate_groundtruth(groundtruth_info, permeability, pressure)
 
     loc_hp = get_hp_location(x)
-
     x = transforms(x, loc_hp=loc_hp)
     x = tensor_transform(x).to(device)
     y = transforms(y, loc_hp=loc_hp)
     y = tensor_transform(y)
 
-    # begin normalize()
-
     norm = NormalizeTransform(info)
-
     x = norm(x, "Inputs")
     y = norm(y, "Labels")
-
-    # end normalize()
 
     return x, y, info, norm
 

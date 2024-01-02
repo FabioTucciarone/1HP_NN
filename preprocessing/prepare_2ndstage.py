@@ -35,15 +35,8 @@ def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, posi
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
 
-    a = time.perf_counter()
     single_hps, corner_ll = build_inputs(info, pressure, permeability, positions, device)
-    b = time.perf_counter()
-    print(f"Zeit :: build_inputs() :: {b - a}s")
-
-    a = time.perf_counter()
     hp_inputs = prepare_hp_boxes_demonstrator(info, model_1HP, single_hps)
-    b = time.perf_counter()
-    print(f"Zeit :: prepare_hp_boxes_demonstrator() :: {b - a}s")
 
     return hp_inputs, corner_ll
 
@@ -93,12 +86,9 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
     hp: HeatPump
     hp_inputs = []
 
-    a = time.perf_counter()
     for hp in single_hps:   
         hp.primary_temp_field = hp.apply_nn(model_1HP)
         hp.primary_temp_field = reverse_temperature_norm(hp.primary_temp_field, info)
-    b = time.perf_counter()
-    print(f"Zeit :: prepare_hp_boxes_demonstrator() : 2 x hp.apply_nn(): {b-a}s")
 
     for hp in single_hps:
         hp.get_other_temp_field(single_hps)
