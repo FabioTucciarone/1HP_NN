@@ -21,11 +21,12 @@ from domain_classes.heat_pump import HeatPump
 from domain_classes.utils_2hp import save_config_of_separate_inputs, save_config_of_merged_inputs, save_yaml
 from domain_classes.stitching import Stitching
 from utils.prepare_paths import Paths2HP
-
+from data_stuff.transforms import NormalizeTransform
+                                   
 import numpy as np
 
 
-def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, positions, device):
+def prepare_demonstrator_input_2hp(model_1hp_info, model_2hp_info, model_1HP, pressure, permeability, positions, device):
     """
     assumptions:
     - 1hp-boxes are generated already
@@ -35,8 +36,8 @@ def prepare_demonstrator_input_2hp(info, model_1HP, pressure, permeability, posi
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
 
-    single_hps, corner_ll = build_inputs(info, pressure, permeability, positions, device)
-    hp_inputs = prepare_hp_boxes_demonstrator(info, model_1HP, single_hps)
+    single_hps, corner_ll = build_inputs(model_1hp_info, model_2hp_info, pressure, permeability, positions, device)
+    hp_inputs = prepare_hp_boxes_demonstrator(model_2hp_info, model_1HP, single_hps)
 
     return hp_inputs, corner_ll
 
@@ -104,27 +105,31 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
 
 
 # Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
-def build_inputs(info, pressure, permeability, positions, device):
+def build_inputs(model_1hp_info, model_2hp_info, pressure, permeability, positions, device):
 
     pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
 
-    field_size = info["CellsNumber"]
+    field_size = model_2hp_info["CellsNumber"]
     inputs = torch.empty(size=(4, field_size[0], field_size[1]))
 
-    gradient_idx = info["Inputs"]["Pressure Gradient [-]"]["index"]
+    gradient_idx = model_1hp_info["Inputs"]["Pressure Gradient [-]"]["index"]
     inputs[gradient_idx] = torch.ones(field_size).float() * pressure
 
-    permeability_idx = info["Inputs"]["Permeability X [m^2]"]["index"]
+    permeability_idx = model_1hp_info["Inputs"]["Permeability X [m^2]"]["index"]
     inputs[permeability_idx] = torch.tensor(np.full(field_size, permeability, order='F')).float()
 
-    material_id_idx = info["Inputs"]["Material ID"]["index"]
-    inputs[material_id_idx] = torch.zeros(field_size)
-    inputs[material_id_idx][pos_hps[0][0], pos_hps[0][1]] = 1
-    inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 1
+    material_id_idx = model_1hp_info["Inputs"]["Material ID"]["index"]
+    inputs[material_id_idx] = torch.ones(field_size)
+    inputs[material_id_idx][pos_hps[0][0], pos_hps[0][1]] = 2
+    inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 2
     material_ids = inputs[material_id_idx]
 
-    size_hp_box = torch.tensor([info["CellsNumberPrior"][0],info["CellsNumberPrior"][1],])
-    distance_hp_corner = torch.tensor([info["PositionHPPrior"][1], info["PositionHPPrior"][0]-2])
+    norm = NormalizeTransform(model_1hp_info)
+    inputs = norm(inputs, "Inputs")
+
+
+    size_hp_box = torch.tensor([model_1hp_info["CellsNumber"][0],model_1hp_info["CellsNumber"][1],])
+    distance_hp_corner = torch.tensor([model_1hp_info["PositionLastHP"][1], model_1hp_info["PositionLastHP"][0]-2])
     pos_hps = torch.stack(pos_hps)
 
     hp_boxes = []
@@ -148,8 +153,8 @@ def build_inputs(info, pressure, permeability, positions, device):
             
         tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device=device,)
             
-        if "SDF" in info["Inputs"]: # 0.00071s anstatt 0.088s mit tmp_hp.recalc_sdf(info)
-            index_sdf = info["Inputs"]["SDF"]["index"]
+        if "SDF" in model_1hp_info["Inputs"]: # 0.00071s anstatt 0.088s mit tmp_hp.recalc_sdf(info)
+            index_sdf = model_1hp_info["Inputs"]["SDF"]["index"]
             distances = torch.tensor(np.moveaxis(np.mgrid[:tmp_input[index_sdf].shape[0],:tmp_input[index_sdf].shape[1]], 0, -1)) - distance_hp_corner
             distances = torch.linalg.vector_norm(distances.float(), dim=2)
             tmp_hp.inputs[index_sdf] = 1 - distances / distances.max()
@@ -185,6 +190,10 @@ def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str 
             info = yaml.safe_load(file)
         prepare_dataset(paths, inputs_1hp, info=info, power2trafo=False)
     print(f"Domain prepared ({paths.dataset_1st_prep_path})")
+
+    print(f"INFO :: paths.raw_path {paths.raw_path}")
+    print(f"INFO :: paths.dataset_1st_prep_path: {paths.dataset_1st_prep_path}")
+    print(f"INFO :: paths.dataset_model_trained_with_prep_path: {paths.dataset_model_trained_with_prep_path}")
 
 # prepare dataset for 2nd stage
     time_start_prep_2hp = time.perf_counter()

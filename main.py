@@ -60,7 +60,7 @@ def prepare_data_and_paths(settings:SettingsTraining):
         print(f"Dataset {paths.dataset_1st_prep_path} prepared")
 
     else:
-        if not paths.datasets_boxes_prep_path.exists(): # TODO settings.case == "test"?
+        if not paths.datasets_boxes_prep_path.exists() or True: # TODO settings.case == "test"?
             prepare_dataset_for_2nd_stage(paths, inputs_1hp, settings.device)
         print(f"Dataset prepared ({paths.datasets_boxes_prep_path})")
 

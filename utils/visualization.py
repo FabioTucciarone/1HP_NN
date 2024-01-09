@@ -83,11 +83,11 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     return display_data
 
 
-def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
+def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
     # TODO: Hier noch langsam
-    
-    size_hp_box = info["CellsNumberPrior"]
-    image_shape = info["OutFieldShape"]
+
+    size_hp_box = model_2hp_info["CellsNumberPrior"]
+    image_shape = model_2hp_info["OutFieldShape"]
     out_image = torch.full(image_shape, 10.6)
 
     with torch.no_grad():
@@ -97,7 +97,7 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
     for i in range(2):
         import preprocessing.prepare_2ndstage as prep
         y = y_out[i].detach()[0]
-        y = prep.reverse_temperature_norm(y, info)
+        y = prep.reverse_temperature_norm(y, model_2hp_info)
 
         ll_x = corners_ll[i][0] - corner_dist[1]
         ll_y = corners_ll[i][1] - corner_dist[0]
@@ -111,10 +111,10 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
         out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = y[clip_ll_x - ll_x : y.shape[0] - ur_x + clip_ur_x, 
                                                                     clip_ll_y - ll_y : y.shape[1] - ur_y + clip_ur_y]
 
-    extent_highs = out_image.shape * np.array(info["CellsSize"][:2])
+    extent_highs = out_image.shape * np.array(model_2hp_info["CellsSize"][:2])
     display_data = mc.DisplayData(color_palette)
     display_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0, extent_highs[0], extent_highs[1], 0))
-    
+
     return display_data
 
 
