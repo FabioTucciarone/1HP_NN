@@ -85,23 +85,20 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
 
 def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
     # TODO: Hier noch langsam
-    # ACHTUNG: Feldhöhe ist fest auf max. 60 gesetzt!
-    size_hp_box = info["CellsNumberPrior"]
-    field_shape = info["CellsNumber"]
-    image_shape = [field_shape[0] - size_hp_box[0] - 1, field_shape[1] - size_hp_box[1] - 1]
-    image_shape[1] = min(image_shape[1], 60)
     
-    model.eval()
-    len_batch = hp_inputs.shape[0]
-    out_image = torch.full((image_shape[0], image_shape[1]), 10.6)
+    size_hp_box = info["CellsNumberPrior"]
+    image_shape = info["OutFieldShape"]
+    out_image = torch.full(image_shape, 10.6)
 
-    for i in range(len_batch):
+    with torch.no_grad():
+        model.eval()
+        y_out = model(hp_inputs.detach()) # TODO: Zwischen 0.02s und 0.25s ...
 
-        x = torch.unsqueeze(hp_inputs[i].to(device), 0)
-        y_out = torch.squeeze(model(x).to(device), 0)
-
+    for i in range(2):
         import preprocessing.prepare_2ndstage as prep
-        y_out = prep.reverse_temperature_norm(y_out.detach()[0], info).cpu()
+        y = y_out[i].detach()[0]
+        y = prep.reverse_temperature_norm(y, info)
+
         ll_x = corners_ll[i][0] - corner_dist[1]
         ll_y = corners_ll[i][1] - corner_dist[0]
         ur_x = ll_x + size_hp_box[0]
@@ -111,12 +108,12 @@ def get_2hp_plots(model: UNet, info, hp_inputs, corners_ll, corner_dist, color_p
         clip_ur_x = min(ur_x, image_shape[0])
         clip_ur_y = min(ur_y, image_shape[1])
 
-        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = y_out[clip_ll_x - ll_x : y_out.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y_out.shape[1]- ur_y + clip_ur_y]
+        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = y[clip_ll_x - ll_x : y.shape[0] - ur_x + clip_ur_x, 
+                                                                    clip_ll_y - ll_y : y.shape[1] - ur_y + clip_ur_y]
 
-    extent_highs = out_image.shape * np.array(info["CellsSize"][:2]) # TODO: Einbinden
-
+    extent_highs = out_image.shape * np.array(info["CellsSize"][:2])
     display_data = mc.DisplayData(color_palette)
-    display_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0,extent_highs[0],extent_highs[1],0))
+    display_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0, extent_highs[0], extent_highs[1], 0))
     
     return display_data
 
@@ -240,6 +237,7 @@ def infer_all_and_summed_pic(model: UNet, dataloader: DataLoader, device: str):
     current_id = 0
     avg_inference_time = 0
     summed_error_pic = torch.zeros_like(torch.Tensor(dataloader.dataset[0][0][0])).cpu()
+
 
     for inputs, labels in dataloader:
         len_batch = inputs.shape[0]
