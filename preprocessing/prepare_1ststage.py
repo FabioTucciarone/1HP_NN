@@ -65,7 +65,7 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     x["SDF"][9][23][0] = 2
     x["Material ID"] = x["SDF"]
 
-    y = gt.generate_groundtruth(groundtruth_info, permeability, pressure)
+    y, method = gt.generate_groundtruth(groundtruth_info, permeability, pressure)
 
     loc_hp = get_hp_location(x)
     x = transforms(x, loc_hp=loc_hp)
@@ -77,7 +77,7 @@ def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_inf
     x = norm(x, "Inputs")
     y = norm(y, "Labels")
 
-    return x, y, info, norm
+    return x, y, method, norm
 
 
 def prepare_dataset(paths: Union[Paths1HP, Paths2HP], inputs: str, power2trafo: bool = True, info:dict = None):

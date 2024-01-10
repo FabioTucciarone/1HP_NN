@@ -63,7 +63,7 @@ class DataToVisualize:
             self.name = "SDF-transformed position in [-]"
 
 
-def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_palette, device: str = "cpu"):
+def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info: dict, norm, color_palette, device: str = "cpu"):
 
     x = torch.unsqueeze(x, 0)
     y_out = model(x).to(device)
@@ -74,13 +74,13 @@ def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info, norm, color_p
     y_out = norm.reverse(y_out.detach()[0],"Labels")[0].cpu()
 
     dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
-    display_data = mc.DisplayData(color_palette)
-    display_data.set_figure("model_result", dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
-    display_data.set_figure("groundtruth", dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
-    display_data.set_figure("error_measure", dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
-    display_data.average_error = torch.mean(torch.abs(y_out - y)).item()
+    return_data = mc.ReturnData(color_palette)
+    return_data.set_figure("model_result", dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
+    return_data.set_figure("groundtruth", dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
+    return_data.set_figure("error_measure", dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
+    return_data.set_return_value("average_error", torch.mean(torch.abs(y_out - y)).item())
 
-    return display_data
+    return return_data
 
 
 def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
@@ -112,10 +112,10 @@ def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dis
                                                                     clip_ll_y - ll_y : y.shape[1] - ur_y + clip_ur_y]
 
     extent_highs = out_image.shape * np.array(model_2hp_info["CellsSize"][:2])
-    display_data = mc.DisplayData(color_palette)
-    display_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0, extent_highs[0], extent_highs[1], 0))
+    return_data = mc.ReturnData(color_palette)
+    return_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0, extent_highs[0], extent_highs[1], 0))
 
-    return display_data
+    return return_data
 
 
 def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
