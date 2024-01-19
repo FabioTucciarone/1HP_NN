@@ -1,3 +1,6 @@
+# Forschungsprojekt
+Zwischenstand Phase 1 Commit SHA: 1b30f61c319425ce028d422a8634aaf1c34962eb
+
 # Python Requirements
 - pyyaml
 - torch
