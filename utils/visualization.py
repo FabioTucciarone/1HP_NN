@@ -108,8 +108,8 @@ def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dis
         clip_ur_x = min(ur_x, image_shape[0])
         clip_ur_y = min(ur_y, image_shape[1])
 
-        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = y[clip_ll_x - ll_x : y.shape[0] - ur_x + clip_ur_x, 
-                                                                    clip_ll_y - ll_y : y.shape[1] - ur_y + clip_ur_y]
+        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = torch.maximum(y[clip_ll_x - ll_x : y.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y.shape[1] - ur_y + clip_ur_y], 
+                                                                                out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y])
 
     extent_highs = out_image.shape * np.array(model_2hp_info["CellsSize"][:2])
     return_data = mc.ReturnData(color_palette)
