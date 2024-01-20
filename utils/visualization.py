@@ -97,7 +97,7 @@ def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dis
     for i in range(2):
         import preprocessing.prepare_2ndstage as prep
         y = y_out[i].detach()[0]
-        y = prep.reverse_temperature_norm(y, model_2hp_info)
+        y = prep.reverse_temperature_norm(y, model_2hp_info).cpu()
 
         ll_x = corners_ll[i][0] - corner_dist[1]
         ll_y = corners_ll[i][1] - corner_dist[0]
