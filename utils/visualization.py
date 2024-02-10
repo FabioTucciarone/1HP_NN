@@ -66,7 +66,12 @@ class DataToVisualize:
 def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info: dict, norm, color_palette, device: str = "cpu"):
 
     x = torch.unsqueeze(x, 0)
+    
+    time_begin = time.perf_counter()
     y_out = model(x).to(device)
+    torch.cuda.synchronize()
+    time_end = time.perf_counter() - time_begin
+    print(f"> modell: {time_end}")
 
     # reverse transform for plotting real values
     x = norm.reverse(x.detach().squeeze(), "Inputs").cpu()
@@ -92,7 +97,11 @@ def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dis
 
     with torch.no_grad():
         model.eval()
+        
+        time_begin = time.perf_counter()
         y_out = model(hp_inputs.detach()) # TODO: Zwischen 0.02s und 0.25s ...
+        torch.cuda.synchronize()
+        time_end = time.perf_counter() - time_begin
 
     for i in range(2):
         import preprocessing.prepare_2ndstage as prep
@@ -115,6 +124,7 @@ def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dis
     return_data = mc.ReturnData(color_palette)
     return_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0, extent_highs[0], extent_highs[1], 0))
 
+    print(f"> modell: {time_end}")
     return return_data
 
 
