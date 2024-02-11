@@ -35,11 +35,11 @@ def prepare_demonstrator_input_2hp(model_1hp_info, model_2hp_info, model_1HP, pr
     - boundaries of boxes around at least one hp is within domain
     - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
     """
-    time_begin = time.perf_counter()
+    prepare_t1 = time.perf_counter()
     single_hps, corner_ll = build_inputs(model_1hp_info, model_2hp_info, pressure, permeability, positions, device)
     hp_inputs = prepare_hp_boxes_demonstrator(model_2hp_info, model_1HP, single_hps)
-    time_end = time.perf_counter() - time_begin
-    print(f"> prepare_2: {time_end}")
+    prepare_t2 = time.perf_counter()
+    print(f"{prepare_t2 - prepare_t1}, ", end="")
 
     return hp_inputs, corner_ll
 
@@ -89,9 +89,12 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
     hp: HeatPump
     hp_inputs = []
 
+    model_1hp_t1 = time.perf_counter()
     for hp in single_hps:   
         hp.primary_temp_field = hp.apply_nn(model_1HP)
+        torch.cuda.synchronize()
         hp.primary_temp_field = reverse_temperature_norm(hp.primary_temp_field, info)
+    model_1hp_t2 = time.perf_counter()
 
     for hp in single_hps:
         hp.get_other_temp_field(single_hps)
@@ -103,6 +106,7 @@ def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPu
 
         hp_inputs.append(inputs)
 
+    print(f"{model_1hp_t2 - model_1hp_t1}, ", end="")
     return stack(hp_inputs)
 
 
