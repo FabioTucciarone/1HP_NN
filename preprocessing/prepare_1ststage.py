@@ -19,7 +19,7 @@ from utils.prepare_paths import Paths1HP, Paths2HP
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forschungsprojekt-pumpen-demonstrator", "demonstrator_backend"))
-from groundtruth_data import DatasetInfo
+from model_communication import ModelConfiguration
 import generate_groundtruth as gt
 
 
@@ -43,41 +43,6 @@ def prepare_dataset_for_1st_stage(paths: Paths1HP, settings: SettingsTraining, i
         yaml.safe_dump(
             {"timestamp of end": time.ctime(), 
                 "duration of whole process in seconds": time_end}, file)
-        
- 
-def prepare_demonstrator_input(paths: Union[Paths1HP, Paths2HP], groundtruth_info: DatasetInfo, permeability: float, pressure: float, info, device):
-    """
-    Generate a prepared dataset directly from the input parameters of the demonstrator app.
-    The input preperation is based on the gksi-input with a fixed position.
-    """
-    transforms = get_transforms(reduce_to_2D=True, reduce_to_2D_xy=True, power2trafo=True)
-    pflotran_settings = get_pflotran_settings(paths.raw_path)
-
-    dims = np.array(pflotran_settings["grid"]["ncells"])
-
-    tensor_transform = ToTensorTransform()
-
-    # Eingaben laden:
-    x = dict()
-    x["Pressure Gradient [-]"] = torch.ones(list(dims)).float() * pressure
-    x["Permeability X [m^2]"] = torch.tensor(np.full(dims, permeability, order='F')).float()
-    x["SDF"] = torch.ones(list(dims)).float() 
-    x["SDF"][9][23][0] = 2
-    x["Material ID"] = x["SDF"]
-
-    y, method = gt.generate_groundtruth(groundtruth_info, permeability, pressure)
-
-    loc_hp = get_hp_location(x)
-    x = transforms(x, loc_hp=loc_hp)
-    x = tensor_transform(x).to(device)
-    y = transforms(y, loc_hp=loc_hp)
-    y = tensor_transform(y)
-
-    norm = NormalizeTransform(info)
-    x = norm(x, "Inputs")
-    y = norm(y, "Labels")
-
-    return x, y, method, norm
 
 
 def prepare_dataset(paths: Union[Paths1HP, Paths2HP], inputs: str, power2trafo: bool = True, info:dict = None):

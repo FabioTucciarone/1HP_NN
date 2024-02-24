@@ -6,15 +6,13 @@ from typing import List
 import time
 import yaml
 
-import torch # TODO: [BAFO]
-from data_stuff.utils import load_yaml # TODO: [BAFO]
+import torch
 import domain_classes.domain as domain
 
 from torch import stack, load, unsqueeze, save, Tensor
 from tqdm.auto import tqdm
 
 from networks.unet import UNet
-import preprocessing.prepare_1ststage as prep_1hp
 from preprocessing.prepare_1ststage import prepare_dataset
 from domain_classes.domain import Domain
 from domain_classes.heat_pump import HeatPump
@@ -22,24 +20,10 @@ from domain_classes.utils_2hp import save_config_of_separate_inputs, save_config
 from domain_classes.stitching import Stitching
 from utils.prepare_paths import Paths2HP
 from data_stuff.transforms import NormalizeTransform
-                                   
+from model_communication import ModelConfiguration
+
 import numpy as np
 
-
-def prepare_demonstrator_input_2hp(model_1hp_info, model_2hp_info, model_1HP, pressure, permeability, positions, device):
-    """
-    assumptions:
-    - 1hp-boxes are generated already
-    - 1hpnn is trained
-    - cell sizes of 1hp-boxes and domain are the same
-    - boundaries of boxes around at least one hp is within domain
-    - device: attention, all stored need to be produced on cpu for later pin_memory=True and all other can be gpu
-    """
-
-    single_hps, corner_ll = build_inputs(model_1hp_info, model_2hp_info, pressure, permeability, positions, device)
-    hp_inputs = prepare_hp_boxes_demonstrator(model_2hp_info, model_1HP, single_hps)
-
-    return hp_inputs, corner_ll
 
 # Kopie, da sonst nur über Objekt Zugriff. Siehe domain.py
 def reverse_temperature_norm(data, info):
@@ -82,86 +66,6 @@ def norm_temperature(data, info):
     else:
         raise ValueError(f"Normalization type not recognized")
     return data
-
-def prepare_hp_boxes_demonstrator(info, model_1HP: UNet, single_hps: List[HeatPump]):
-    hp: HeatPump
-    hp_inputs = []
-
-    for hp in single_hps:   
-        hp.primary_temp_field = hp.apply_nn(model_1HP)
-        hp.primary_temp_field = reverse_temperature_norm(hp.primary_temp_field, info)
-
-    for hp in single_hps:
-        hp.get_other_temp_field(single_hps)
-
-    for hp in single_hps:
-        hp.primary_temp_field = norm_temperature(hp.primary_temp_field, info)
-        hp.other_temp_field = norm_temperature(hp.other_temp_field, info)
-        inputs = stack([hp.primary_temp_field, hp.other_temp_field])
-
-        hp_inputs.append(inputs)
-
-    return stack(hp_inputs)
-
-
-# Vorbedingung: # Pressure Gradient [-] oder Permeability X [m^2] in [0,1]
-def build_inputs(model_1hp_info, model_2hp_info, pressure, permeability, positions, device):
-
-    pos_hps = [torch.tensor(positions[0]), torch.tensor(positions[1])]
-
-    field_size = model_2hp_info["CellsNumber"]
-    inputs = torch.empty(size=(4, field_size[0], field_size[1]))
-
-    gradient_idx = model_1hp_info["Inputs"]["Pressure Gradient [-]"]["index"]
-    inputs[gradient_idx] = torch.ones(field_size).float() * pressure
-
-    permeability_idx = model_1hp_info["Inputs"]["Permeability X [m^2]"]["index"]
-    inputs[permeability_idx] = torch.tensor(np.full(field_size, permeability, order='F')).float()
-
-    material_id_idx = model_1hp_info["Inputs"]["Material ID"]["index"]
-    inputs[material_id_idx] = torch.ones(field_size)
-    inputs[material_id_idx][pos_hps[0][0], pos_hps[0][1]] = 2
-    inputs[material_id_idx][pos_hps[1][0], pos_hps[1][1]] = 2
-    material_ids = inputs[material_id_idx]
-
-    norm = NormalizeTransform(model_1hp_info)
-    inputs = norm(inputs, "Inputs")
-
-
-    size_hp_box = torch.tensor([model_1hp_info["CellsNumber"][0],model_1hp_info["CellsNumber"][1],])
-    distance_hp_corner = torch.tensor([model_1hp_info["PositionLastHP"][1], model_1hp_info["PositionLastHP"][0]-2])
-    pos_hps = torch.stack(pos_hps)
-
-    hp_boxes = []
-    corners_ll = []
-
-    for idx in range(len(pos_hps)):
-        
-        pos_hp = pos_hps[idx]
-
-        corner_ll, corner_ur = domain.get_box_corners(pos_hp, size_hp_box, distance_hp_corner, inputs.shape[1:])
-        corners_ll.append(corner_ll)
-
-        tmp_input = inputs[:, corner_ll[0] : corner_ur[0], corner_ll[1] : corner_ur[1]].detach().clone()
-        tmp_mat_ids = torch.stack(list(torch.where(tmp_input == torch.max(material_ids))), dim=0).T
-
-        if len(tmp_mat_ids) > 1:
-            for i in range(len(tmp_mat_ids)):
-                tmp_pos = tmp_mat_ids[i]
-                if (tmp_pos[1:2] != distance_hp_corner).all():
-                    tmp_input[tmp_pos[0], tmp_pos[1], tmp_pos[2]] = 0
-            
-        tmp_hp = HeatPump(id=idx, pos=pos_hp, orientation=0, inputs=tmp_input, names=[], dist_corner_hp=distance_hp_corner, label=None, device=device,)
-            
-        if "SDF" in model_1hp_info["Inputs"]: # 0.00071s anstatt 0.088s mit tmp_hp.recalc_sdf(info)
-            index_sdf = model_1hp_info["Inputs"]["SDF"]["index"]
-            distances = torch.tensor(np.moveaxis(np.mgrid[:tmp_input[index_sdf].shape[0],:tmp_input[index_sdf].shape[1]], 0, -1)) - distance_hp_corner
-            distances = torch.linalg.vector_norm(distances.float(), dim=2)
-            tmp_hp.inputs[index_sdf] = 1 - distances / distances.max()
-
-        hp_boxes.append(tmp_hp)
-
-    return hp_boxes, corners_ll
 
 
 def prepare_dataset_for_2nd_stage(paths: Paths2HP, inputs_1hp: str, device: str = "cuda:0"):

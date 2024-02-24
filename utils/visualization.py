@@ -25,7 +25,8 @@ plt.rcParams['figure.figsize'] = [8, 2.5]
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forschungsprojekt-pumpen-demonstrator", "demonstrator_backend"))
-import model_communication as mc
+from model_communication import ModelConfiguration, ReturnData
+
 # TODO: look at vispy library for plotting 3D data
 
 @dataclass
@@ -61,61 +62,6 @@ class DataToVisualize:
             self.name = "Permeability in [m$^2$]"
         elif self.name == "SDF":
             self.name = "SDF-transformed position in [-]"
-
-
-def get_plots(model: UNet, x: torch.Tensor, y: torch.Tensor, info: dict, norm, color_palette, device: str = "cpu"):
-
-    x = torch.unsqueeze(x, 0)
-    y_out = model(x).to(device)
-
-    # reverse transform for plotting real values
-    x = norm.reverse(x.detach().squeeze(), "Inputs").cpu()
-    y = norm.reverse(y.detach(),"Labels")[0].cpu()
-    y_out = norm.reverse(y_out.detach()[0],"Labels")[0].cpu()
-
-    dict_to_plot = prepare_data_to_plot(x, y, y_out, info)
-    return_data = mc.ReturnData(color_palette)
-    return_data.set_figure("model_result", dict_to_plot["t_out"].data.T, **dict_to_plot["t_out"].imshowargs)
-    return_data.set_figure("groundtruth", dict_to_plot["t_true"].data.T, **dict_to_plot["t_true"].imshowargs)
-    return_data.set_figure("error_measure", dict_to_plot["error"].data.T, **dict_to_plot["error"].imshowargs)
-    return_data.set_return_value("average_error", torch.mean(torch.abs(y_out - y)).item())
-
-    return return_data
-
-
-def get_2hp_plots(model: UNet, model_2hp_info, hp_inputs, corners_ll, corner_dist, color_palette, device: str = "cpu"):
-    # TODO: Hier noch langsam
-
-    size_hp_box = model_2hp_info["CellsNumberPrior"]
-    image_shape = model_2hp_info["OutFieldShape"]
-    out_image = torch.full(image_shape, 10.6)
-
-    with torch.no_grad():
-        model.eval()
-        y_out = model(hp_inputs.detach()) # TODO: Zwischen 0.02s und 0.25s ...
-
-    for i in range(2):
-        import preprocessing.prepare_2ndstage as prep
-        y = y_out[i].detach()[0]
-        y = prep.reverse_temperature_norm(y, model_2hp_info).cpu()
-
-        ll_x = corners_ll[i][0] - corner_dist[1]
-        ll_y = corners_ll[i][1] - corner_dist[0]
-        ur_x = ll_x + size_hp_box[0]
-        ur_y = ll_y + size_hp_box[1]
-        clip_ll_x = max(ll_x, 0)
-        clip_ll_y = max(ll_y, 0)
-        clip_ur_x = min(ur_x, image_shape[0])
-        clip_ur_y = min(ur_y, image_shape[1])
-
-        out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y] = torch.maximum(y[clip_ll_x - ll_x : y.shape[0] - ur_x + clip_ur_x, clip_ll_y - ll_y : y.shape[1] - ur_y + clip_ur_y], 
-                                                                                out_image[clip_ll_x : clip_ur_x, clip_ll_y : clip_ur_y])
-
-    extent_highs = out_image.shape * np.array(model_2hp_info["CellsSize"][:2])
-    return_data = mc.ReturnData(color_palette)
-    return_data.set_figure("model_result", out_image.T, cmap="RdBu_r", extent=(0, extent_highs[0], extent_highs[1], 0))
-
-    return return_data
 
 
 def visualizations(model: UNet, dataloader: DataLoader, device: str, amount_datapoints_to_visu: int = inf, plot_path: str = "default", pic_format: str = "png"):
